@@ -152,6 +152,24 @@ def compressive_tv_alt(measurement, mt_op, img_shape, alpha=None):
     return f.value.reshape(img_shape)
 
 
+def compressive_tv_alt2(measurement, mt_op, img_shape, alpha=None):
+    f = cp.Variable(mt_op.shape[1])
+    f2 = cp_reshape(f, img_shape)
+    sparsity_term = cp.atoms.total_variation.tv(f2)**2
+    if alpha is None:
+        objective = cp.Minimize(sparsity_term)
+        constraints = [mt_op @ f == measurement]
+        prob = cp.Problem(objective, constraints)
+    else:
+        objective = cp.Minimize(
+            (alpha*sparsity_term
+             + cp_sum((measurement - mt_op @ f)**2))
+        )
+        prob = cp.Problem(objective)
+    prob.solve(solver=cp.SCS)
+    return f.value.reshape(img_shape)
+
+
 def figure_name_format(img_id, noise_var=0., kind="", alpha=None, other_params=None):
     name = "{}_{:.0e}_{}".format(img_id, noise_var, kind)
     if alpha is not None:
@@ -268,22 +286,22 @@ def show_methods(img_id=3, noise_var=0.):
     # print(omega)
     # rxi = synth(measurement, mt_op, noise_var, omega)
 
-    alpha_values = {("l1", 3, 0.): 1e-6, ("l1h", 3, 0.): 1e-6, ("tc2", 3, 0.): 1e-6, ("tva", 3, 0.): 1e-6,
-                    ("l1", 3, 1e-1): 1e-3, ("l1h", 3, 1e-1): 1e-6, ("tc2", 3, 1e-1): 1e-1, ("tva", 3, 1e-1): 1e-3,
-                    ("l1", 2, 0.): 1e-6, ("l1h", 2, 0.): 1e-6, ("tc2", 2, 0.): 1e-6, ("tva", 2, 0.): 1e-6,
-                    ("l1", 2, 1e-1): 1e-3, ("l1h", 2, 1e-1): 1e-6, ("tc2", 2, 1e-1): 1e-6, ("tva", 2, 1e-1): 1e-3,
-                    ("l1", 6, 0.): 1e-6, ("l1h", 6, 0.): 1e-6, ("tc2", 6, 0.): 1e-6, ("tva", 6, 0.): 1e-6,
-                    ("l1", 6, 1e-1): 1e-3, ("l1h", 6, 1e-1): 1e-6, ("tc2", 6, 1e-1): 1e-6, ("tva", 6, 1e-1): 1e-1,
-                    ("l1", 7, 0.): 1e-6, ("l1h", 7, 0.): 1e-6, ("tc2", 7, 0.): 1e-6, ("tva", 7, 0.): 1e-3,
-                    ("l1", 7, 1e-1): 1e-3, ("l1h", 7, 1e-1): 1e-6, ("tc2", 7, 1e-1): 1e-6, ("tva", 7, 1e-1): 1e-3}
+    alpha_values = {("l1", 3, 0.): 1e-6, ("l1h", 3, 0.): 1e-6, ("tc2", 3, 0.): 1e-6, ("tva", 3, 0.): 1e-6, ("tva2", 3, 0.): 1e-6,
+                    ("l1", 3, 1e-1): 1e-3, ("l1h", 3, 1e-1): 1e-6, ("tc2", 3, 1e-1): 1e-1, ("tva", 3, 1e-1): 1e-3, ("tva2", 3, 1e-1): 1e-3,
+                    ("l1", 2, 0.): 1e-6, ("l1h", 2, 0.): 1e-6, ("tc2", 2, 0.): 1e-6, ("tva", 2, 0.): 1e-6, ("tva2", 2, 0.): 1e-6,
+                    ("l1", 2, 1e-1): 1e-3, ("l1h", 2, 1e-1): 1e-6, ("tc2", 2, 1e-1): 1e-6, ("tva", 2, 1e-1): 1e-3, ("tva2", 2, 1e-1): 1e-3,
+                    ("l1", 6, 0.): 1e-6, ("l1h", 6, 0.): 1e-6, ("tc2", 6, 0.): 1e-6, ("tva", 6, 0.): 1e-6, ("tva2", 6, 0.): 1e-6,
+                    ("l1", 6, 1e-1): 1e-3, ("l1h", 6, 1e-1): 1e-6, ("tc2", 6, 1e-1): 1e-6, ("tva", 6, 1e-1): 1e-1, ("tva2", 6, 1e-1): 1e-1,
+                    ("l1", 7, 0.): 1e-6, ("l1h", 7, 0.): 1e-6, ("tc2", 7, 0.): 1e-6, ("tva", 7, 0.): 1e-3, ("tva2", 7, 0.): 1e-3,
+                    ("l1", 7, 1e-1): 1e-3, ("l1h", 7, 1e-1): 1e-6, ("tc2", 7, 1e-1): 1e-6, ("tva", 7, 1e-1): 1e-3, ("tva2", 7, 1e-1): 1e-3}
 
     # alpha = 1e-6 # seems to be good for all cases
 
     estimates = {}
 
     for processing_method, proc_method_name in zip(
-            [compressive_l1, compressive_l1_haar, compressive_tc2, compressive_tv_alt],
-            ["l1", "l1h", "tc2", "tva"]
+            [compressive_l1, compressive_l1_haar, compressive_tc2, compressive_tv_alt, compressive_tv_alt2],
+            ["l1", "l1h", "tc2", "tva", "tva2"]
     ):
         estimates[proc_method_name] = processing_method(
             measurement, mt_op, src_img.shape,
@@ -311,11 +329,12 @@ def show_methods(img_id=3, noise_var=0.):
 
     plot_part(src_img, "src", "Объект исследования")
     plot_part(traditional_gi, "gi", "Обычное ФИ")
-    for name, desc in zip(["l1", "l1h", "tc2", "tva"],
+    for name, desc in zip(["l1", "l1h", "tc2", "tva", "tva2"],
                           ["нормы L1 в базисе DCT",
                            "нормы L1 в базисе преобразования Хаара",
                            "полной кривизны",
-                           "анизотропного варианта вариации"]):
+                           "анизотропного варианта вариации",
+                           "альт. анизотропного варианта вариации"]):
         plot_part(estimates[name], name,
                   "Сжатые измерения, минимизация " + desc)
     plot_part(estimate_red_dense, "red",
