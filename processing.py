@@ -360,7 +360,13 @@ def show_single_method(img_id=3, noise_var=0.):
         img_id=img_id, noise_var=noise_var
     )
 
-    result = sparse_reduction(measurement, mt_op, src_img.shape)
+    data_marker = "{}_{:.0e}".format(img_id, noise_var)
+
+    result = sparse_reduction(measurement, mt_op, src_img.shape,
+                              thresholding_coeff=1., data_marker=data_marker)
+
+    src_img = load_demo_image(img_id, pad_by=32)
+    print(np.linalg.norm(result - src_img)**2)
 
     plt.imshow(result, cmap=plt.cm.gray)
 
