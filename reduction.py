@@ -133,4 +133,19 @@ def sparse_reduction(measurement, mt_op, img_shape, thresholding_coeff=1., data_
     print("Dense reduction done")
     res = do_thresholding(red_res, cov_op, basis="dct",
                           thresholding_coeff=thresholding_coeff)
-    return res
+
+    #TODO Omit the following if sufficient measurement data to estimate the image
+    expected_measurement = mt_op.dot(res.ravel())
+    f = cp.Variable(mt_op.shape[1])
+    f2 = cp_reshape(f, img_shape)
+    # sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
+    #                  + cp_norm1(cp_diff(f2, k=1, axis=1)))**2
+    sparsity_term = cp.atoms.total_variation.tv(f2)**2
+    objective = cp.Minimize(sparsity_term)
+    constraints = [mt_op @ f == expected_measurement]
+    prob = cp.Problem(objective, constraints)
+    try:
+        prob.solve(solver="ECOS")
+    except cp.error.SolverError:
+        prob.solve(solver="SCS")
+    return f.value.reshape(img_shape)
