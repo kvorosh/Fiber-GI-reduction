@@ -31,6 +31,25 @@ def dense_reduction(measurement, mt_op, img_shape, calc_cov_op=False):
         return red_res
 
 
+def dense_reduction_iter(measurement, mt_op, img_shape, n_iter=None, relax=0.15,
+                         print_progress=False):
+    red_res = np.zeros(mt_op.shape[1])
+    if n_iter is None:
+        n_iter = measurement.size
+
+    for i in trange(n_iter):
+        ind = i % mt_op.shape[0]
+        row = mt_op[ind, :]
+        correction_scal = (measurement[ind] - row.dot(red_res))/(row.dot(row))
+        red_res += row * relax * correction_scal
+        # red_res = red_res.clip(0, None)
+        # if print_progress:
+            # print(i, correction_scal*row.dot(row))
+        if isinstance(print_progress, list):
+            print_progress.append(correction_scal*row.dot(row))
+    return red_res.reshape(img_shape)
+
+
 def do_thresholding(data, cov_op, basis="haar", thresholding_coeff=0., kind="hard"):
     """
     Apply thresholding to data based on its variance.

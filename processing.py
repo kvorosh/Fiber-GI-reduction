@@ -19,7 +19,7 @@ from cvxpy.atoms.norm1 import norm1 as cp_norm1
 import matplotlib.pyplot as plt
 from misc import load_demo_image, save_image_for_show
 from fiber_propagation import propagator
-from reduction import dense_reduction, sparse_reduction
+from reduction import dense_reduction, sparse_reduction, dense_reduction_iter
 
 
 def synth(measurement, mt_op, img_shape, noise_var, omega):
@@ -251,6 +251,27 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
     ))
 
 
+def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
+    mt_op, _, measurement, src_img, _ = prepare_measurements(
+        img_id=img_id, noise_var=noise_var
+    )
+    for relax in [1.]:
+        if relax == 1.:
+            pp = []
+        else:
+            pp = False
+        estimate = dense_reduction_iter(measurement, mt_op, src_img.shape,
+                                        relax=relax, n_iter=1000000, print_progress=pp)
+        save_image_for_show(estimate, figure_name_format(
+            img_id, noise_var, "red-iter", alpha=relax
+        ), rescale=True)
+        if pp:
+            plt.plot(pp)
+    print("Done for imd_id = {}, noise_var = {} and proc_kind = red-iter".format(
+        img_id, noise_var
+    ))
+    plt.show()
+
 
 def show_methods(img_id=3, noise_var=0.):
     mt_op, illum_patterns, measurement, src_img, size = prepare_measurements(
@@ -415,3 +436,4 @@ if __name__ == "__main__":
     # finding_alpha(7, 0., "l1h")
     # finding_alpha(7, 1e-1, "l1")
     # finding_alpha(7, 1e-1, "l1h")
+    # finding_iter_params(3, 0.)
