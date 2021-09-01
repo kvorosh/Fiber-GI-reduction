@@ -173,7 +173,8 @@ def sparse_reduction(measurement, mt_op, img_shape, thresholding_coeff=1.,
     constraints = [mt_op @ f == expected_measurement]
     prob = cp.Problem(objective, constraints)
     try:
-        prob.solve(solver="ECOS")
+        prob.solve(solver=cp.SCS)
     except cp.error.SolverError:
-        prob.solve(solver="SCS")
+        prob.solve(solver=cp.ECOS)
+    t_end = perf_counter()
     return f.value.reshape(img_shape)
