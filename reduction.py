@@ -18,16 +18,25 @@ from cvxpy.atoms.norm1 import norm1 as cp_norm1
 from tqdm import trange
 
 
-def dense_reduction(measurement, mt_op, img_shape, calc_cov_op=False):
-    red_res = lsmr(mt_op, measurement)[0].reshape(img_shape)
+def dense_reduction(measurement, mt_op, img_shape, calc_cov_op=False, eig=False):
     if calc_cov_op:
         print("Covariance operator calculation started.")
         t_start = perf_counter()
-        cov_op = np.linalg.pinv(mt_op.T.dot(mt_op))
+        #TODO Change to iterative methods depending on which is faster
+        u, s, vh = np.linalg.svd(mt_op, False, True, False)
+        mask = abs(s) > abs(s).max() * 1e-15
+        s2 = np.zeros_like(s)
+        s2[mask] = 1/s[mask]
+        red_res = ((vh.T * s2) @ u.T @ measurement).reshape(img_shape)
         t_end = perf_counter()
         print("Cov. op. calculation took {:.3g} s".format(t_end - t_start))
-        return red_res, cov_op
+        if eig:
+            return red_res, s2, vh
+        else:
+            cov_op = (vh.T * s2**2) @ vh
+            return red_res, cov_op
     else:
+        red_res = lsmr(mt_op, measurement)[0].reshape(img_shape)
         return red_res
 
 
@@ -50,7 +59,8 @@ def dense_reduction_iter(measurement, mt_op, img_shape, n_iter=None, relax=0.15,
     return red_res.reshape(img_shape)
 
 
-def do_thresholding(data, cov_op, basis="haar", thresholding_coeff=0., kind="hard"):
+def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind="hard",
+                    sing_val=None, sing_vec=None):
     """
     Apply thresholding to data based on its variance.
 
@@ -63,14 +73,21 @@ def do_thresholding(data, cov_op, basis="haar", thresholding_coeff=0., kind="har
     ----------
     data : array_like
         Input data. Its size must be equal to N (see below).
-    cov_op : (N, N) array_like
+    cov_op : (N, N) array_like or None
         Covariance operator of input data.
-    basis : {"haar", "dct"}
+        Can be None if basis == "eig".
+    basis : {"haar", "dct", "eig"}
         Thresholding basis choice.
     threshold_coeff : float
         Multiplier for variances.
     kind : {"hard", "soft"}
         Whether to do hard or soft thresholding.
+    sing_val : array_like or None
+        Singular values of the measuring system.
+        Used only if basis == "eig".
+    sing_vec : array_like or None
+        Singular vectors of the measuring system.
+        Used only if basis == "eig".
 
     Returns
     -------
@@ -86,18 +103,24 @@ def do_thresholding(data, cov_op, basis="haar", thresholding_coeff=0., kind="har
         transform_1d = partial(dct, axis=0)
         transform_2d = lambda data: dct(dct(data, axis=0), axis=1)
         inverse_transform_2d = lambda data: idct(idct(data, axis=1)/4, axis=0)/data.size
+    elif basis == "eig":
+        transform_2d = lambda data: sing_vec.dot(data.ravel())
+        inverse_transform_2d = lambda matr: (sing_vec.T.dot(matr)).reshape(data.shape)
     else:
         raise NotImplementedError("Thresholding in {} basis not implemented yet!".format(basis))
 
     # The following should work when data is both 1D and 2D.
-    transform_matrix = transform_1d(np.eye(data.shape[0]))
-    if len(data.shape) > 1:
-        if data.shape[0] != data.shape[1]:
-            transform_matrix_1 = transform_1d(np.eye(data.shape[1]))
-        else:
-            transform_matrix_1 = transform_matrix
-        transform_matrix = np.kron(transform_matrix, transform_matrix_1)
-    variances = transform_matrix.dot(cov_op).dot(transform_matrix.T).diagonal().reshape(data.shape)
+    if basis == "eig":
+        variances = sing_val**2
+    else:
+        transform_matrix = transform_1d(np.eye(data.shape[0]))
+        if len(data.shape) > 1:
+            if data.shape[0] != data.shape[1]:
+                transform_matrix_1 = transform_1d(np.eye(data.shape[1]))
+            else:
+                transform_matrix_1 = transform_matrix
+            transform_matrix = np.kron(transform_matrix, transform_matrix_1)
+        variances = transform_matrix.dot(cov_op).dot(transform_matrix.T).diagonal().reshape(data.shape)
     data_in_basis = transform_2d(data)
 
     threshold = np.sqrt(variances)*thresholding_coeff
@@ -119,28 +142,33 @@ def do_thresholding(data, cov_op, basis="haar", thresholding_coeff=0., kind="har
 
 
 
-def sparse_reduction(measurement, mt_op, img_shape, thresholding_coeff=1., data_marker=None):
-    if data_marker is None:
-        red_res, cov_op = dense_reduction(measurement, mt_op, img_shape, calc_cov_op=True)
+def sparse_reduction(measurement, mt_op, img_shape, thresholding_coeff=1.,
+                     basis="dct"):
+    #TODO Skip thresholding if no noise
+    if basis == "eig":
+        red_res, sing_val, sing_vec = dense_reduction(
+            measurement, mt_op, img_shape, calc_cov_op=True, eig=True
+        )
+        if thresholding_coeff == 0:
+            return red_res
+        print("Dense reduction done")
+        res = do_thresholding(red_res, basis=basis,
+                              thresholding_coeff=thresholding_coeff,
+                              sing_val=sing_val, sing_vec=sing_vec)
     else:
-        try:
-            with np.load("res_cov_{}.npz".format(data_marker)) as data:
-                red_res = data["red"]
-                cov_op = data["cov"]
-        except FileNotFoundError:
-            red_res, cov_op = dense_reduction(measurement, mt_op, img_shape, calc_cov_op=True)
-            np.savez_compressed("res_cov_{}.npz".format(data_marker), red=red_res, cov=cov_op)
-    print("Dense reduction done")
-    res = do_thresholding(red_res, cov_op, basis="dct",
-                          thresholding_coeff=thresholding_coeff)
+        red_res, cov_op = dense_reduction(measurement, mt_op, img_shape,
+                                                  calc_cov_op=True)
+        print("Dense reduction done")
+        res = do_thresholding(red_res, cov_op, basis=basis,
+                              thresholding_coeff=thresholding_coeff)
 
     #TODO Omit the following if sufficient measurement data to estimate the image
     expected_measurement = mt_op.dot(res.ravel())
     f = cp.Variable(mt_op.shape[1])
     f2 = cp_reshape(f, img_shape)
-    # sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
-    #                  + cp_norm1(cp_diff(f2, k=1, axis=1)))**2
-    sparsity_term = cp.atoms.total_variation.tv(f2)**2
+    sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
+                      + cp_norm1(cp_diff(f2, k=1, axis=1)))**2
+    # sparsity_term = cp.atoms.total_variation.tv(f2)**2
     objective = cp.Minimize(sparsity_term)
     constraints = [mt_op @ f == expected_measurement]
     prob = cp.Problem(objective, constraints)

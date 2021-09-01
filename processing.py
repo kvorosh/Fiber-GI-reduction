@@ -380,22 +380,43 @@ def show_single_method(img_id=3, noise_var=0.):
     mt_op, illum_patterns, measurement, src_img, size = prepare_measurements(
         img_id=img_id, noise_var=noise_var
     )
-
-    data_marker = "{}_{:.0e}".format(img_id, noise_var)
-
-    result = sparse_reduction(measurement, mt_op, src_img.shape,
-                              thresholding_coeff=1., data_marker=data_marker)
-
     src_img = load_demo_image(img_id, pad_by=32)
-    print(np.linalg.norm(result - src_img)**2)
 
-    plt.imshow(result, cmap=plt.cm.gray)
+    # "dct", no noise: 1e-5
+    # "dct", 1e-2 noise: at least 1
 
-    plt.show()
+    basis = "eig"
+    thr_coeff_values = [1e-5, 1e-4, 1e-3, 1e-2, 5e-2, 1e-1, 1.]
+    # thr_coeff_values = [10, 100, 1e3, 1e4, 1e5]
+    # thr_coeff_values = [5e-4, 5e-3]
+    for thr_coeff in thr_coeff_values:
+        result = sparse_reduction(measurement, mt_op, src_img.shape,
+                              thresholding_coeff=thr_coeff, basis=basis)
+        diff_sq = np.linalg.norm(result - src_img)**2
+        save_image_for_show(result.clip(0, None), "red_sparse_{}_{:.0e}_{}_{:.0e}".format(
+            img_id, noise_var, basis, thr_coeff
+        ), rescale=True)
+        with open("red_sparse_diff.txt", "a", encoding="utf-8") as f:
+            f.write("{}\t{:.1g}\t{}\t{:.1g}\t{:.3g}\n".format(img_id, noise_var, basis, thr_coeff, diff_sq))
+
+    # result = compressive_tv_alt(measurement, mt_op, src_img.shape, alpha=1e-6)
+    # print(np.linalg.norm(result - src_img)**2)
+    # plt.imshow(result, cmap=plt.cm.gray)
+    # plt.show()
+
+
+    # result = sparse_reduction(measurement, mt_op, src_img.shape,
+    #                           thresholding_coeff=1e-3, basis="eig")
+    # src_img = load_demo_image(img_id, pad_by=32)
+    # print(np.linalg.norm(result - src_img)**2)
+
+    # plt.imshow(result, cmap=plt.cm.gray)
+
+    # plt.show()
 
 
 if __name__ == "__main__":
-    show_single_method(3, 0.)
+    show_single_method(3, 1e-2)
     # show_methods(3)
     # show_methods(3, 1e-1)
     # show_methods(2)
