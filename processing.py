@@ -396,7 +396,10 @@ def show_single_method(img_id=3, noise_var=0.):
     mt_op, illum_patterns, measurement, src_img, size = prepare_measurements(
         img_id=img_id, noise_var=noise_var
     )
-    src_img = load_demo_image(img_id, pad_by=32)
+    if img_id == 6 or img_id == 7:
+        src_img = load_demo_image(img_id)
+    else:
+        src_img = load_demo_image(img_id, pad_by=32)
 
     # "dct", no noise: 1e-5
     # "dct", 1e-2 noise: at least 1
