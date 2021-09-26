@@ -17,6 +17,7 @@ from cvxpy.atoms.affine.reshape import reshape as cp_reshape
 from cvxpy.atoms import norm as cp_norm
 from cvxpy.atoms.norm1 import norm1 as cp_norm1
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 from misc import load_demo_image, save_image_for_show
 from fiber_propagation import propagator
 from reduction import dense_reduction, sparse_reduction, dense_reduction_iter
@@ -267,6 +268,85 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
     ))
 
 
+def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") -> None:
+    """
+    Save data to plot the L-curve for finding the value of alpha
+    to use in image processing.
+
+    Parameters
+    ----------
+    img_id : int, optional
+        Id of the image of the object to be used for processing. The default is 3.
+    noise_var : float, optional
+        Noise variance. The default is 0.
+    proc_kind : str, optional
+        Specification of the processing method. The default is "l1".
+        The valid values are "l1", "l1h", "tc2", "tva" and "tva2".
+
+    Returns
+    -------
+    None
+
+    """
+    processing_method = {"l1": compressive_l1, "tc2": compressive_tc2,
+                         "tva": compressive_tv_alt, "l1h": compressive_l1_haar,
+                         "tva2": compressive_tv_alt2}[proc_kind]
+
+    mt_op, _, measurement, src_img, _ = prepare_measurements(
+        img_id=img_id, noise_var=noise_var
+    )
+    print("Average xi value", measurement.mean())
+
+    residuals = []
+    reg_terms = []
+    alpha_values = np.geomspace(1e-5, 1e2, num=11)
+    #TODO Try a parallel execution of the loop body
+    # Though it will likely fail due to lack of memory
+    for alpha in tqdm(alpha_values):
+        _, resid, reg = processing_method(measurement, mt_op, src_img.shape,
+                                          alpha=alpha, full=True)
+        residuals.append(resid)
+        reg_terms.append(reg)
+
+    residuals = np.array(residuals)
+    reg_terms = np.array(reg_terms)
+    np.savez_compressed(
+        "../l_curve/{}_{:.0e}_{}.npz".format(img_id, noise_var, proc_kind),
+        alpha=alpha_values, resid=residuals, reg=reg_terms
+    )
+
+
+def plot_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") -> None:
+    """
+    Plot the L-curve for finding the value of alpha to use in image processing.
+
+    Parameters
+    ----------
+    img_id : int, optional
+        Id of the image of the object to be used for processing. The default is 3.
+    noise_var : float, optional
+        Noise variance. The default is 0.
+    proc_kind : str, optional
+        Specification of the processing method. The default is "l1".
+        The valid values are "l1", "l1h", "tc2", "tva" and "tva2".
+
+    Returns
+    -------
+    None
+
+    """
+    with np.load("../l_curve/{}_{:.0e}_{}.npz".format(img_id, noise_var, proc_kind)) as data:
+        alpha_values = data["alpha"]
+        reg_terms = data["reg"]
+        residuals = data["resid"]
+    plt.loglog(reg_terms, residuals)
+    plt.xlabel("regularity")
+    plt.ylabel("residual")
+    for x, y, alpha in zip(reg_terms, residuals, alpha_values):
+        plt.annotate("a = {:.3g}".format(alpha), (x, y), xycoords="data")
+    plt.show()
+
+
 def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
     mt_op, _, measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var
@@ -435,7 +515,12 @@ def show_single_method(img_id=3, noise_var=0.):
 
 
 if __name__ == "__main__":
-    show_single_method(3, 1e-2)
+    # show_single_method(3, 0)
+    # show_single_method(3, 1e-1)
+    # show_single_method(6, 0)
+    # show_single_method(6, 1e-1)
+    # show_single_method(7, 0)
+    # show_single_method(7, 1e-1)
     # show_methods(3)
     # show_methods(3, 1e-1)
     # show_methods(2)
@@ -476,4 +561,17 @@ if __name__ == "__main__":
     # finding_alpha(7, 0., "l1h")
     # finding_alpha(7, 1e-1, "l1")
     # finding_alpha(7, 1e-1, "l1h")
+    # finding_alpha_l_curve(3, 1e-1, "l1")
+    # finding_alpha_l_curve(3, 1e-1, "tva")
+    # finding_alpha_l_curve(6, 1e-1, "l1")
+    # finding_alpha_l_curve(6, 1e-1, "l1h")
+    # finding_alpha_l_curve(6, 1e-1, "tc2")
+    # finding_alpha_l_curve(6, 1e-1, "tva")
+    # finding_alpha_l_curve(6, 1e-1, "tva2")
+    # finding_alpha_l_curve(7, 1e-1, "l1")
+    # finding_alpha_l_curve(7, 1e-1, "l1h")
+    # finding_alpha_l_curve(7, 1e-1, "tc2")
+    # finding_alpha_l_curve(7, 1e-1, "tva")
+    # finding_alpha_l_curve(7, 1e-1, "tva2")
+    plot_l_curve(3, 1e-1, "l1")
     # finding_iter_params(3, 0.)
