@@ -189,7 +189,7 @@ def compressive_tv_alt2(measurement, mt_op, img_shape, alpha=None, full=False):
 def figure_name_format(img_id, noise_var=0., kind="", alpha=None, other_params=None):
     name = "{}_{:.0e}_{}".format(img_id, noise_var, kind)
     if alpha is not None:
-        if alpha is not "":
+        if alpha != "":
             try:
                 name = name + "_{:.0e}".format(alpha)
             except TypeError:
