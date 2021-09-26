@@ -235,14 +235,15 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
         Noise variance. The default is 0.
     proc_kind : str, optional
         Specification of the processing method. The default is "l1".
-        The valid values are "l1", "tc2", and "tva".
+        The valid values are "l1", "l1h", "tc2", "tva" and "tva2".
 
     Returns
     -------
     None
     """
     processing_method = {"l1": compressive_l1, "tc2": compressive_tc2,
-                         "tva": compressive_tv_alt, "l1h": compressive_l1_haar}
+                         "tva": compressive_tv_alt, "l1h": compressive_l1_haar,
+                         "tva2": compressive_tv_alt2}
 
     mt_op, _, measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var
