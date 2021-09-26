@@ -28,7 +28,7 @@ def synth(measurement, mt_op, img_shape, noise_var, omega):
     return mt_op.T.dot(np.linalg.solve(tmp_op, measurement)).reshape(img_shape)
 
 
-def compressive_l1(measurement, mt_op, img_shape, alpha=None):
+def compressive_l1(measurement, mt_op, img_shape, alpha=None, full: bool = False):
     tmp_op = mt_op.T.reshape(img_shape + (-1,))
     mt_op_dct = dctn(tmp_op, axes=(0, 1), norm="ortho").reshape((img_shape[0]*img_shape[1], -1)).T #pylint: disable=E1101
 
@@ -39,18 +39,22 @@ def compressive_l1(measurement, mt_op, img_shape, alpha=None):
         constraints = [mt_op_dct @ dct_f == measurement]
         prob = cp.Problem(objective, constraints)
     else:
-        objective = cp.Minimize(
-            alpha*sparsity_term + cp_sum((measurement - mt_op_dct @ dct_f)**2)
-        )
+        fidelity = cp_sum((measurement - mt_op_dct @ dct_f)**2)
+        objective = cp.Minimize(alpha*sparsity_term + fidelity)
         prob = cp.Problem(objective)
     try:
         prob.solve()
     except cp.error.SolverError:
         prob.solve(solver="ECOS")
-    return idctn(dct_f.value.reshape(img_shape), axes=(0, 1), norm="ortho")
+    result_dct = dct_f.value.reshape(img_shape)
+    result = idctn(result_dct, axes=(0, 1), norm="ortho")
+    if full and alpha is not None:
+        return result, fidelity.value, sparsity_term.value
+    else:
+        return result
 
 
-def compressive_l1_haar(measurement, mt_op, img_shape, alpha=None):
+def compressive_l1_haar(measurement, mt_op, img_shape, alpha=None, full=False):
     tmp_op = mt_op.reshape((-1,) + img_shape)
     # Assuming that both elements of img_shape are powers of 2.
     back_transform_matrix = haar_transform(np.eye(img_shape[0]), axis=0,
@@ -69,18 +73,22 @@ def compressive_l1_haar(measurement, mt_op, img_shape, alpha=None):
         constraints = [mt_op_haar @ haar_f == measurement]
         prob = cp.Problem(objective, constraints)
     else:
-        objective = cp.Minimize(
-            alpha*sparsity_term + cp_sum((measurement - mt_op_haar @ haar_f)**2)
-        )
+        fidelity = cp_sum((measurement - mt_op_haar @ haar_f)**2)
+        objective = cp.Minimize(alpha*sparsity_term + fidelity)
         prob = cp.Problem(objective)
     try:
         prob.solve()
     except cp.error.SolverError:
         prob.solve(solver="ECOS")
-    return inverse_haar_transform_2d(haar_f.value.reshape(img_shape))
+    result_haar = haar_f.value.reshape(img_shape)
+    result = inverse_haar_transform_2d(result_haar)
+    if full:
+        return result, fidelity.value, sparsity_term.value
+    else:
+        return result
 
 
-def compressive_tc2(measurement, mt_op, img_shape, alpha=None):
+def compressive_tc2(measurement, mt_op, img_shape, alpha=None, full=False):
     f = cp.Variable(mt_op.shape[1])
     f2 = cp_reshape(f, img_shape)
     sparsity_term = (cp_norm(cp_diff(f2, k=2, axis=0), 2)
@@ -90,12 +98,15 @@ def compressive_tc2(measurement, mt_op, img_shape, alpha=None):
         constraints = [mt_op @ f == measurement]
         prob = cp.Problem(objective, constraints)
     else:
-        objective = cp.Minimize(
-            (alpha*sparsity_term + cp_norm(measurement - mt_op @ f, 2))
-        )
+        fidelity = cp_norm(measurement - mt_op @ f, 2)
+        objective = cp.Minimize(alpha*sparsity_term + fidelity)
         prob = cp.Problem(objective)
     prob.solve()
-    return f.value.reshape(img_shape)
+    result = f.value.reshape(img_shape)
+    if full and alpha is not None:
+        return result, fidelity.value, sparsity_term.value
+    else:
+        return result
 
 
 def compressive_tv(measurement, mt_op, img_shape, alpha=None):
@@ -132,7 +143,7 @@ def compressive_tv(measurement, mt_op, img_shape, alpha=None):
     return res.x.reshape(img_shape)
 
 
-def compressive_tv_alt(measurement, mt_op, img_shape, alpha=None):
+def compressive_tv_alt(measurement, mt_op, img_shape, alpha=None, full=False):
     f = cp.Variable(mt_op.shape[1])
     f2 = cp_reshape(f, img_shape)
     sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
@@ -142,17 +153,19 @@ def compressive_tv_alt(measurement, mt_op, img_shape, alpha=None):
         constraints = [mt_op @ f == measurement]
         prob = cp.Problem(objective, constraints)
     else:
-        objective = cp.Minimize(
-            (alpha*sparsity_term
-             + cp_sum((measurement - mt_op @ f)**2))
-        )
+        fidelity = cp_sum((measurement - mt_op @ f)**2)
+        objective = cp.Minimize(alpha*sparsity_term + fidelity)
         prob = cp.Problem(objective)
     # prob.solve(solver=cp.ECOS)
     prob.solve()
-    return f.value.reshape(img_shape)
+    result = f.value.reshape(img_shape)
+    if full and alpha is not None:
+        return result, fidelity.value, sparsity_term.value
+    else:
+        return result
 
 
-def compressive_tv_alt2(measurement, mt_op, img_shape, alpha=None):
+def compressive_tv_alt2(measurement, mt_op, img_shape, alpha=None, full=False):
     f = cp.Variable(mt_op.shape[1])
     f2 = cp_reshape(f, img_shape)
     sparsity_term = cp.atoms.total_variation.tv(f2)**2
@@ -161,13 +174,15 @@ def compressive_tv_alt2(measurement, mt_op, img_shape, alpha=None):
         constraints = [mt_op @ f == measurement]
         prob = cp.Problem(objective, constraints)
     else:
-        objective = cp.Minimize(
-            (alpha*sparsity_term
-             + cp_sum((measurement - mt_op @ f)**2))
-        )
+        fidelity = cp_sum((measurement - mt_op @ f)**2)
+        objective = cp.Minimize(alpha*sparsity_term + fidelity)
         prob = cp.Problem(objective)
     prob.solve(solver=cp.SCS)
-    return f.value.reshape(img_shape)
+    result = f.value.reshape(img_shape)
+    if full and alpha is not None:
+        return result, fidelity.value, sparsity_term.value
+    else:
+        return result
 
 
 def figure_name_format(img_id, noise_var=0., kind="", alpha=None, other_params=None):
