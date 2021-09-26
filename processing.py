@@ -5,6 +5,7 @@ Created on Fri Apr 23 16:26:32 2021
 @author: balakin
 """
 
+from collections import defaultdict
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint
 from scipy.fft import dctn, idctn #pylint: disable=E0611
@@ -403,16 +404,15 @@ def show_methods(img_id=3, noise_var=0.):
     # print(omega)
     # rxi = synth(measurement, mt_op, noise_var, omega)
 
-    alpha_values = {("l1", 3, 0.): 1e-6, ("l1h", 3, 0.): 1e-6, ("tc2", 3, 0.): 1e-6, ("tva", 3, 0.): 1e-6, ("tva2", 3, 0.): 1e-6,
-                    ("l1", 3, 1e-1): 1e-3, ("l1h", 3, 1e-1): 1e-6, ("tc2", 3, 1e-1): 1e-1, ("tva", 3, 1e-1): 1e-3, ("tva2", 3, 1e-1): 1e-3,
-                    ("l1", 2, 0.): 1e-6, ("l1h", 2, 0.): 1e-6, ("tc2", 2, 0.): 1e-6, ("tva", 2, 0.): 1e-6, ("tva2", 2, 0.): 1e-6,
-                    ("l1", 2, 1e-1): 1e-3, ("l1h", 2, 1e-1): 1e-6, ("tc2", 2, 1e-1): 1e-6, ("tva", 2, 1e-1): 1e-3, ("tva2", 2, 1e-1): 1e-3,
-                    ("l1", 6, 0.): 1e-6, ("l1h", 6, 0.): 1e-6, ("tc2", 6, 0.): 1e-6, ("tva", 6, 0.): 1e-6, ("tva2", 6, 0.): 1e-6,
-                    ("l1", 6, 1e-1): 1e-3, ("l1h", 6, 1e-1): 1e-6, ("tc2", 6, 1e-1): 1e-6, ("tva", 6, 1e-1): 1e-1, ("tva2", 6, 1e-1): 1e-1,
-                    ("l1", 7, 0.): 1e-6, ("l1h", 7, 0.): 1e-6, ("tc2", 7, 0.): 1e-6, ("tva", 7, 0.): 1e-3, ("tva2", 7, 0.): 1e-3,
-                    ("l1", 7, 1e-1): 1e-3, ("l1h", 7, 1e-1): 1e-6, ("tc2", 7, 1e-1): 1e-6, ("tva", 7, 1e-1): 1e-3, ("tva2", 7, 1e-1): 1e-3}
+    alpha_values = {("tc2", 3, 1e-1): 6e-3, ("tva2", 3, 1e-1): 0.158,
+                    ("tc2", 2, 1e-1): 1e-3, ("tva2", 2, 1e-1): 0.158,
+                    ("tc2", 6, 1e-1): 6e-3,
+                    ("tc2", 7, 1e-1): 1e-3}
 
-    # alpha = 1e-6 # seems to be good for all cases
+    alpha_values = defaultdict(lambda: 1e-5, alpha_values)
+    # None, corresponding to alpha = 0+ would be a more accurate default value,
+    # especially for no noise,
+    # but this provides the same results faster.
 
     estimates = {}
 
