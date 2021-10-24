@@ -143,7 +143,7 @@ def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind
 
 
 def sparse_reduction(measurement, mt_op, img_shape, thresholding_coeff=1.,
-                     basis="dct"):
+                     basis="eig"):
     #TODO Skip thresholding if no noise
     if basis == "eig":
         red_res, sing_val, sing_vec = dense_reduction(
