@@ -269,7 +269,8 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
     ))
 
 
-def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") -> None:
+def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0,
+                          proc_kind: str = "l1", n_measurements: int = 1024) -> None:
     """
     Save data to plot the L-curve for finding the value of alpha
     to use in image processing.
@@ -283,6 +284,8 @@ def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str 
     proc_kind : str, optional
         Specification of the processing method. The default is "l1".
         The valid values are "l1", "l1h", "tc2", "tva" and "tva2".
+    n_measurements : int
+        The number of illumination patterns to use.
 
     Returns
     -------
@@ -312,12 +315,15 @@ def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str 
     residuals = np.array(residuals)
     reg_terms = np.array(reg_terms)
     np.savez_compressed(
-        "../l_curve/{}_{:.0e}_{}.npz".format(img_id, noise_var, proc_kind),
+        "../l_curve/{}_{:.0e}_{}_{}.npz".format(
+            img_id, noise_var, proc_kind, n_measurements
+        ),
         alpha=alpha_values, resid=residuals, reg=reg_terms
     )
 
 
-def plot_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") -> None:
+def plot_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1",
+                 n_measurements: int = 1024) -> None:
     """
     Plot the L-curve for finding the value of alpha to use in image processing.
 
@@ -330,13 +336,17 @@ def plot_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") -
     proc_kind : str, optional
         Specification of the processing method. The default is "l1".
         The valid values are "l1", "l1h", "tc2", "tva" and "tva2".
+    n_measurements : int
+        The number of illumination patterns to use.
 
     Returns
     -------
     None
 
     """
-    with np.load("../l_curve/{}_{:.0e}_{}.npz".format(img_id, noise_var, proc_kind)) as data:
+    with np.load("../l_curve/{}_{:.0e}_{}_{}.npz".format(
+            img_id, noise_var, proc_kind, n_measurements
+    )) as data:
         alpha_values = data["alpha"]
         reg_terms = data["reg"]
         residuals = data["resid"]
