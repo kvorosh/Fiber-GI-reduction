@@ -32,7 +32,8 @@ def load_demo_image(img_id=0, full_span=False, pad_by=0):
     """
     img_paths = {0: "teapot.png", 1: "logo.png", 2: "logo64.png",
                  3: partial(demo_two_slits, (64, 64), 48, 8, 8), 4: "simple.png",
-                 5: "alum.png", 6: "teapot128.png", 7: "teapot64.png"}
+                 5: "alum.png", 6: "teapot128.png", 7: "teapot64.png",
+                 8: partial(demo_two_slits, (128, 128), 96, 16, 16)}
     if callable(img_paths[img_id]):
         img = img_paths[img_id]()
     else:
