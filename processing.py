@@ -469,8 +469,12 @@ def show_methods(img_id=3, noise_var=0.):
     estimates = {}
 
     for processing_method, proc_method_name in zip(
-            [compressive_l1, compressive_l1_haar, compressive_tc2, compressive_tv_alt, compressive_tv_alt2],
-            ["l1", "l1h", "tc2", "tva", "tva2"]
+            [compressive_l1,
+             # compressive_l1_haar,
+             compressive_tc2, compressive_tv_alt, compressive_tv_alt2],
+            ["l1",
+             # "l1h",
+             "tc2", "tva", "tva2"]
     ):
         estimates[proc_method_name] = processing_method(
             measurement, mt_op, src_img.shape,
@@ -506,12 +510,14 @@ def show_methods(img_id=3, noise_var=0.):
 
     plot_part(src_img, "src", "Объект исследования")
     plot_part(traditional_gi, "gi", "Обычное ФИ")
-    for name, desc in zip(["l1", "l1h", "tc2", "tva", "tva2"],
+    for name, desc in zip(["l1",
+                           # "l1h",
+                           "tc2", "tva", "tva2"],
                           ["нормы L1 в базисе DCT",
-                           "нормы L1 в базисе преобразования Хаара",
+                           # "нормы L1 в базисе преобразования Хаара",
                            "полной кривизны",
-                           "анизотропного варианта вариации",
-                           "альт. анизотропного варианта вариации"]):
+                           "анизотропного вар-та вариации",
+                           "альт. анизотропного вар-та вариации"]):
         plot_part(estimates[name], name,
                   "Сжатые измерения, минимизация " + desc)
     plot_part(estimate_red_dense, "red",
