@@ -189,8 +189,9 @@ def compressive_tv_alt2(measurement, mt_op, img_shape, alpha=None, full=False):
         return result
 
 
-def figure_name_format(img_id, noise_var=0., kind="", alpha=None, other_params=None):
-    name = "{}_{:.0e}_{}".format(img_id, noise_var, kind)
+def figure_name_format(img_id, noise_var=0., kind="", alpha=None,
+                       other_params=None, pattern_type="pseudorandom"):
+    name = "{}_{}_{:.0e}_{}".format(img_id, pattern_type[0], noise_var, kind)
     if alpha is not None:
         if alpha != "":
             try:
@@ -422,9 +423,11 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
     plt.show()
 
 
-def show_methods(img_id=3, noise_var=0.):
+def show_methods(img_id=3, noise_var=0., n_patterns=1024, pattern_type: str="pseudorandom"):
     mt_op, illum_patterns, measurement, src_img, size = prepare_measurements(
-        img_id=img_id, noise_var=noise_var
+        img_id=img_id, noise_var=noise_var,
+        n_patterns=n_patterns,
+        pattern_type=pattern_type
     )
 
     traditional_gi = np.tensordot(measurement - measurement.mean(),
@@ -500,7 +503,11 @@ def show_methods(img_id=3, noise_var=0.):
         plt.imshow(image, cmap=plt.cm.gray, extent=[-size, size, -size, size]) #pylint: disable=E1101
         plt.xlabel("x, мкм")
         plt.ylabel("y, мкм")
-        save_image_for_show(image, figure_name_format(img_id, noise_var, part_name, ""),
+        save_image_for_show(image,
+                            figure_name_format(
+                                img_id, noise_var, part_name, "",
+                                pattern_type=pattern_type
+                            ),
                             rescale=True)
         plt.title(part_title)
 
@@ -540,14 +547,11 @@ def show_methods(img_id=3, noise_var=0.):
     #     save_image_for_show(estimate, "synth_{:.0e}".format(omega), rescale=True)
 
 
-def show_single_method(img_id=3, noise_var=0.):
+def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom"):
     mt_op, illum_patterns, measurement, src_img, size = prepare_measurements(
-        img_id=img_id, noise_var=noise_var
+        img_id=img_id, noise_var=noise_var, n_patterns=n_measurements,
+        pattern_type=pattern_type
     )
-    if img_id == 6 or img_id == 7:
-        src_img = load_demo_image(img_id)
-    else:
-        src_img = load_demo_image(img_id, pad_by=32)
 
     # "dct", no noise: 1e-5
     # "dct", 1e-2 noise: at least 1
@@ -592,6 +596,7 @@ if __name__ == "__main__":
     # show_single_method(6, 1e-1)
     # show_single_method(7, 0)
     # show_single_method(7, 1e-1)
+    # show_methods(8, 1e-1, n_patterns=512, save=True, show=True, pattern_type="speckle")
     # show_methods(3)
     # show_methods(3, 1e-1)
     # show_methods(2)
