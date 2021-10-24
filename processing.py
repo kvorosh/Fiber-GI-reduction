@@ -6,6 +6,7 @@ Created on Fri Apr 23 16:26:32 2021
 """
 
 from collections import defaultdict
+from os import remove
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint
 from scipy.fft import dctn, idctn #pylint: disable=E0611
@@ -24,6 +25,7 @@ from tqdm import tqdm
 from misc import load_demo_image, save_image_for_show
 from fiber_propagation import propagator
 from reduction import dense_reduction, sparse_reduction, dense_reduction_iter
+from time import perf_counter
 
 
 def synth(measurement, mt_op, img_shape, noise_var, omega):
@@ -589,9 +591,89 @@ def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type
     plt.show()
 
 
+def se_calculations(img_id=3, noise_var=0.1, tau_value=0.1, pattern_type: str="pseudorandom"):
+
+    output = "../data/se_{}_{}_{:.0e}_{:.0e}.dat".format(img_id, pattern_type[0], noise_var, tau_value)
+    intermediate_results = "../data/_se_{}_{}_{:.0e}_{:.0e}.dat".format(img_id, pattern_type[0], noise_var, tau_value)
+    max_n_patterns = 13000
+    total_mt_op, total_illum_patterns, total_measurement, src_img, _ = prepare_measurements(
+        img_id=img_id, noise_var=noise_var, n_patterns=max_n_patterns,
+        pattern_type=pattern_type
+    )
+
+    se_results = []
+    header = ["n", "gi",
+              # "l1",
+              "tva", "tva2", "reds"]
+
+    t_start = perf_counter()
+
+    if pattern_type == "quasirandom":
+        n_patterns_values = [1, 2, 4, 8, 16, 32, 64, 128, 256, 288, 320, 352, 368,
+                             384, 400, 416, 448, 480, 512, 1024, 2048]
+    else:
+        n_patterns_values = [1, 2, 4, 8, 16, 32, 64, 128, 256, 288, 320, 352, 368,
+                             384, 400, 416, 448, 480, 512, 1024, 2048, 4096, 8192,
+                             max_n_patterns]
+    se_results = np.empty((len(n_patterns_values), len(header)))
+    header = '\t'.join(header)
+    try:
+        prev_results = np.loadtxt(intermediate_results)
+    except OSError:
+        start_ind = 0
+    else:
+        start_ind = prev_results.shape[0]
+        se_results[: start_ind, :] = prev_results
+        n_patterns_values = n_patterns_values[start_ind: ]
+
+    for i, n_patterns in tqdm(enumerate(n_patterns_values, start_ind),
+                              total=len(n_patterns_values)):
+        measurement = total_measurement[: n_patterns]
+        mt_op = total_mt_op[: n_patterns, ...]
+        illum_patterns = total_illum_patterns[: n_patterns, ...]
+        se_results[i, 0] = n_patterns
+
+        # Traditional ghost imaging
+        traditional_gi = np.tensordot(measurement - measurement.mean(),
+                                      illum_patterns - illum_patterns.mean(axis=0),
+                                      axes=1)/measurement.size
+        se_results[i, 1] = np.linalg.norm(traditional_gi - src_img)**2
+
+        # L1 compressive sensing
+        # cs_l1 = compressive_l1(measurement, mt_op, src_img.shape, alpha=1e-5)
+        # current_results.append(np.linalg.norm(cs_l1 - src_img)**2)
+
+        # anisotropic TV compressive sensing
+        cs_tva = compressive_tv_alt(measurement, mt_op, src_img.shape, alpha=1e-5)
+        se_results[i, 2] = np.linalg.norm(cs_tva - src_img)**2
+
+        # anisotropic TV compressive sensing, second version
+        cs_tva2 = compressive_tv_alt2(measurement, mt_op, src_img.shape, alpha=1e-5)
+        se_results[i, 3] = np.linalg.norm(cs_tva2 - src_img)**2
+
+        # measurement reduction
+        reds = sparse_reduction(measurement, mt_op, src_img.shape,
+                                thresholding_coeff=tau_value)
+        se_results[i, 4] = np.linalg.norm(reds - src_img)**2
+
+        np.savetxt(intermediate_results, se_results[: i + 1, ...],
+                   delimiter='\t', fmt='%.5g', header=header)
+
+    t_end = perf_counter()
+    print("Calculations took {:.3g} s.".format(t_end - t_start))
+
+    np.savetxt(output.format(img_id, noise_var), se_results,
+               delimiter='\t', fmt='%.5g', header=header)
+    try:
+        remove(intermediate_results)
+    except FileNotFoundError:
+        pass
 if __name__ == "__main__":
     # show_single_method(3, 0)
     # show_single_method(3, 1e-1)
+    se_calculations(7, 1e-1, 1., pattern_type="quasirandom")
+    se_calculations(7, 1e-1, 10., pattern_type="quasirandom")
+    # show_single_method(3, 1e-1, 1024)
     # show_single_method(6, 0)
     # show_single_method(6, 1e-1)
     # show_single_method(7, 0)
@@ -649,5 +731,5 @@ if __name__ == "__main__":
     # finding_alpha_l_curve(7, 1e-1, "tc2")
     # finding_alpha_l_curve(7, 1e-1, "tva")
     # finding_alpha_l_curve(7, 1e-1, "tva2")
-    plot_l_curve(3, 1e-1, "l1")
+    # plot_l_curve(3, 1e-1, "l1")
     # finding_iter_params(3, 0.)
