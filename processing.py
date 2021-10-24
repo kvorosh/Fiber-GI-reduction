@@ -425,7 +425,7 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
     plt.show()
 
 
-def show_methods(img_id=3, noise_var=0., n_patterns=1024, pattern_type: str="pseudorandom"):
+def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show: bool=True, pattern_type: str="pseudorandom"):
     mt_op, illum_patterns, measurement, src_img, size = prepare_measurements(
         img_id=img_id, noise_var=noise_var,
         n_patterns=n_patterns,
@@ -496,43 +496,59 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, pattern_type: str="pse
     estimate_red_sparse = sparse_reduction(measurement, mt_op, src_img.shape,
                                            tau_values[(img_id, noise_var)], basis="eig")
 
-    subplot_no = 0
+    cs_part_names = ["l1",
+                  # "l1h",
+                  "tc2", "tva", "tva2"]
+    if save:
+        save_image_for_show(src_img, figure_name_format(img_id, noise_var, "src",
+                                                        "", pattern_type=pattern_type))
+        save_image_for_show(traditional_gi, figure_name_format(img_id, noise_var, "gi",
+                                                        "", pattern_type=pattern_type))
+        for cs_part_name in cs_part_names:
+            save_image_for_show(
+                estimates[cs_part_name], figure_name_format(
+                    img_id, noise_var, cs_part_name,
+                    alpha=alpha_values[(cs_part_name, img_id, float(noise_var))],
+                    pattern_type=pattern_type
+                )
+            )
+        save_image_for_show(estimate_red_dense, figure_name_format(img_id, noise_var, "red",
+                                                        "", pattern_type=pattern_type))
+        save_image_for_show(estimate_red_sparse, figure_name_format(
+            img_id, noise_var, "reds",
+            tau_values[(img_id, float(noise_var))], pattern_type=pattern_type
+        ))
 
-    def plot_part(image, part_name, part_title):
-        nonlocal subplot_no
-        subplot_no += 1
-        plt.subplot(3, 3, subplot_no)
-        plt.imshow(image, cmap=plt.cm.gray, extent=[-size, size, -size, size]) #pylint: disable=E1101
-        plt.xlabel("x, мкм")
-        plt.ylabel("y, мкм")
-        save_image_for_show(image,
-                            figure_name_format(
-                                img_id, noise_var, part_name, "",
-                                pattern_type=pattern_type
-                            ),
-                            rescale=True)
-        plt.title(part_title)
+    if show:
+        subplot_no = 0
 
-    fig = plt.gcf()
-    # fig.clear()
-    fig.set_tight_layout(True)
+        def plot_part(image, part_title):
+            nonlocal subplot_no
+            subplot_no += 1
+            plt.subplot(3, 3, subplot_no)
+            plt.imshow(image, cmap=plt.cm.gray, extent=[-size, size, -size, size]) #pylint: disable=E1101
+            plt.xlabel("x, мкм")
+            plt.ylabel("y, мкм")
+            plt.title(part_title)
 
-    plot_part(src_img, "src", "Объект исследования")
-    plot_part(traditional_gi, "gi", "Обычное ФИ")
-    for name, desc in zip(["l1",
-                           # "l1h",
-                           "tc2", "tva", "tva2"],
-                          ["нормы L1 в базисе DCT",
-                           # "нормы L1 в базисе преобразования Хаара",
-                           "полной кривизны",
-                           "анизотропного вар-та вариации",
-                           "альт. анизотропного вар-та вариации"]):
-        plot_part(estimates[name], name,
-                  "Сжатые измерения, минимизация " + desc)
-    plot_part(estimate_red_dense, "red",
-              "Редукция измерений без дополнительной информации об объекте")
-    plot_part(estimate_red_sparse, "reds",
-              "Редукция измерений при дополнительной информации об объекте")
+        fig = plt.gcf()
+        # fig.clear()
+        fig.set_tight_layout(True)
+
+        plot_part(src_img, "Объект исследования")
+        plot_part(traditional_gi, "Обычное ФИ")
+        for name, desc in zip(cs_part_names,
+                              ["нормы L1 в базисе DCT",
+                               # "нормы L1 в базисе преобразования Хаара",
+                               "полной кривизны",
+                               "анизотропного вар-та вариации",
+                               "альт. анизотропного вар-та вариации"]):
+            plot_part(estimates[name],
+                      "Сжатые измерения, минимизация " + desc)
+        plot_part(estimate_red_dense,
+                  "Редукция измерений без дополнительной информации об объекте")
+        plot_part(estimate_red_sparse,
+                  "Редукция измерений при дополнительной информации об объекте")
     # mng = plt.get_current_fig_manager()
     # try:
     #     mng.frame.Maximize(True)
@@ -542,7 +558,7 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, pattern_type: str="pse
     # plt.savefig("../figures/{}_{}.pdf".format(
     #     img_names[img_id], "noisy" if noise_var > 0 else "noiseless"
     # ))
-    # plt.show()
+        plt.show()
 
     # for omega in [1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3]:
     #     estimate = synth(measurement, mt_op, src_img.shape, 1., omega)
