@@ -5,6 +5,7 @@ Created on Sat Jul 31 00:03:07 2021
 
 from functools import partial
 from time import perf_counter
+import logging
 import numpy as np
 from scipy.sparse.linalg import lsmr
 from scipy.fftpack import dct, idct
@@ -18,9 +19,12 @@ from cvxpy.atoms.norm1 import norm1 as cp_norm1
 from tqdm import trange
 
 
+logger = logging.getLogger("Fiber-GI-reduction.reduction")
+
+
 def dense_reduction(measurement, mt_op, img_shape, calc_cov_op=False, eig=False):
     if calc_cov_op:
-        print("Covariance operator calculation started.")
+        logger.info("Covariance operator calculation started.")
         t_start = perf_counter()
         #TODO Change to iterative methods depending on which is faster
         u, s, vh = np.linalg.svd(mt_op, False, True, False)
@@ -29,7 +33,7 @@ def dense_reduction(measurement, mt_op, img_shape, calc_cov_op=False, eig=False)
         s2[mask] = 1/s[mask]
         red_res = ((vh.T * s2) @ u.T @ measurement).reshape(img_shape)
         t_end = perf_counter()
-        print("Cov. op. calculation took {:.3g} s".format(t_end - t_start))
+        logger.info("Cov. op. calculation took {:.3g} s".format(t_end - t_start))
         if eig:
             return red_res, s2, vh
         else:
@@ -137,28 +141,28 @@ def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind
 
     thresholded_data = inverse_transform_2d(thresholded_data_in_basis)
     t_transform_end = perf_counter()
-    print("{}-related stuff took {:.3g} s".format(basis, t_transform_end - t_transform_start))
+    logger.info("{}-related stuff took {:.3g} s".format(basis, t_transform_end - t_transform_start))
     return thresholded_data
 
 
 
 def sparse_reduction(measurement, mt_op, img_shape, thresholding_coeff=1.,
                      basis="eig"):
-    #TODO Skip thresholding if no noise
+    t_start = perf_counter()
     if basis == "eig":
         red_res, sing_val, sing_vec = dense_reduction(
             measurement, mt_op, img_shape, calc_cov_op=True, eig=True
         )
         if thresholding_coeff == 0:
             return red_res
-        print("Dense reduction done")
+        logger.info("Dense reduction done")
         res = do_thresholding(red_res, basis=basis,
                               thresholding_coeff=thresholding_coeff,
                               sing_val=sing_val, sing_vec=sing_vec)
     else:
         red_res, cov_op = dense_reduction(measurement, mt_op, img_shape,
                                                   calc_cov_op=True)
-        print("Dense reduction done")
+        logger.info("Dense reduction done")
         res = do_thresholding(red_res, cov_op, basis=basis,
                               thresholding_coeff=thresholding_coeff)
 
@@ -177,4 +181,5 @@ def sparse_reduction(measurement, mt_op, img_shape, thresholding_coeff=1.,
     except cp.error.SolverError:
         prob.solve(solver=cp.ECOS)
     t_end = perf_counter()
+    logger.info("Sparse reduction took {:.3g} s".format(t_end - t_start))
     return f.value.reshape(img_shape)

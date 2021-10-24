@@ -7,6 +7,7 @@ Created on Fri Apr 23 16:26:32 2021
 
 from collections import defaultdict
 from os import remove
+import logging
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint
 from scipy.fft import dctn, idctn #pylint: disable=E0611
@@ -25,7 +26,21 @@ from tqdm import tqdm
 from misc import load_demo_image, save_image_for_show
 from fiber_propagation import propagator
 from reduction import dense_reduction, sparse_reduction, dense_reduction_iter
-from time import perf_counter
+
+
+logger = logging.getLogger("Fiber-GI-reduction")
+logger.propagate = False # Do not propagate to the root logger
+logger.setLevel(logging.INFO)
+logger.handlers = []
+fh = logging.FileHandler("processing.log")
+fh.setLevel(logging.INFO)
+ch = logging.StreamHandler()
+ch.setLevel(logging.ERROR)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+ch.setFormatter(formatter)
+logger.addHandler(fh)
+logger.addHandler(ch)
 
 
 def synth(measurement, mt_op, img_shape, noise_var, omega):
@@ -228,7 +243,7 @@ def build_quasirandom_patterns(n_patterns: int, shape):
 
 def load_speckle_patterns(n_patterns: int):
     illum_patterns = []
-    print("Loading speckle patterns")
+    logger.debug("Loading speckle patterns")
     try:
         for pattern_no in range(n_patterns):
             illum_patterns.append(imread("speckle_patterns/slm{}.bmp".format(pattern_no), as_gray=True))
@@ -309,7 +324,7 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
                                          alpha=alpha),
             rescale=True
         )
-    print("Done for imd_id = {}, noise_var = {} and proc_kind = {}".format(
+    logger.INFO("Done for imd_id = {}, noise_var = {} and proc_kind = {}".format(
         img_id, noise_var, proc_kind
     ))
 
@@ -344,7 +359,6 @@ def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0,
     mt_op, _, measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var
     )
-    print("Average xi value", measurement.mean())
 
     residuals = []
     reg_terms = []
@@ -419,7 +433,7 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
         ), rescale=True)
         if pp:
             plt.plot(pp)
-    print("Done for imd_id = {}, noise_var = {} and proc_kind = red-iter".format(
+    logger.info("Done for imd_id = {}, noise_var = {} and proc_kind = red-iter".format(
         img_id, noise_var
     ))
     plt.show()
@@ -676,7 +690,7 @@ def se_calculations(img_id=3, noise_var=0.1, tau_value=0.1, pattern_type: str="p
                    delimiter='\t', fmt='%.5g', header=header)
 
     t_end = perf_counter()
-    print("Calculations took {:.3g} s.".format(t_end - t_start))
+    logger.info("Calculations took {:.3g} s.".format(t_end - t_start))
 
     np.savetxt(output.format(img_id, noise_var), se_results,
                delimiter='\t', fmt='%.5g', header=header)
