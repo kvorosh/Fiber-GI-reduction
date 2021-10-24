@@ -425,7 +425,15 @@ def show_methods(img_id=3, noise_var=0.):
             alpha=alpha_values[(proc_method_name, img_id, float(noise_var))]
         )
 
+    tau_values = {(2, 0.0): 1.0, (2, 0.1): 1,
+                  (3, 0.): 1e-05, (3, 0.1): 0.1,
+                  (6, 0.): 1.0, (6, 0.1): 1,
+                  (7, 0.): 10.0, (7, 0.1): 1.,
+                  (8, 0.): 1e-05, (8, 0.1): 1e-5}
+
     estimate_red_dense = dense_reduction(measurement, mt_op, src_img.shape)
+    estimate_red_sparse = sparse_reduction(measurement, mt_op, src_img.shape,
+                                           tau_values[(img_id, noise_var)], basis="eig")
 
     subplot_no = 0
 
@@ -456,6 +464,8 @@ def show_methods(img_id=3, noise_var=0.):
                   "Сжатые измерения, минимизация " + desc)
     plot_part(estimate_red_dense, "red",
               "Редукция измерений без дополнительной информации об объекте")
+    plot_part(estimate_red_sparse, "reds",
+              "Редукция измерений при дополнительной информации об объекте")
     # mng = plt.get_current_fig_manager()
     # try:
     #     mng.frame.Maximize(True)
@@ -484,34 +494,37 @@ def show_single_method(img_id=3, noise_var=0.):
     # "dct", no noise: 1e-5
     # "dct", 1e-2 noise: at least 1
 
-    basis = "eig"
-    thr_coeff_values = [1e-5, 1e-4, 1e-3, 1e-2, 5e-2, 1e-1, 1.]
-    # thr_coeff_values = [10, 100, 1e3, 1e4, 1e5]
+    # basis = "eig"
+    # # thr_coeff_values = [1e-5, 1e-4, 1e-3, 1e-2, 5e-2, 1e-1, 1.]
+    # # thr_coeff_values = [10, 100, 1e3, 1e4, 1e5]
     # thr_coeff_values = [5e-4, 5e-3]
-    for thr_coeff in thr_coeff_values:
-        result = sparse_reduction(measurement, mt_op, src_img.shape,
-                              thresholding_coeff=thr_coeff, basis=basis)
-        diff_sq = np.linalg.norm(result - src_img)**2
-        save_image_for_show(result.clip(0, None), "red_sparse_{}_{:.0e}_{}_{:.0e}".format(
-            img_id, noise_var, basis, thr_coeff
-        ), rescale=True)
-        with open("red_sparse_diff.txt", "a", encoding="utf-8") as f:
-            f.write("{}\t{:.1g}\t{}\t{:.1g}\t{:.3g}\n".format(img_id, noise_var, basis, thr_coeff, diff_sq))
+    # for thr_coeff in thr_coeff_values:
+    #     result = sparse_reduction(measurement, mt_op, src_img.shape,
+    #                           thresholding_coeff=thr_coeff, basis=basis)
+    #     diff_sq = np.linalg.norm(result - src_img)**2
+    #     save_image_for_show(result.clip(0, None), "red_sparse_{}_{:.0e}_{}_{:.0e}".format(
+    #         img_id, noise_var, basis, thr_coeff
+    #     ), rescale=True)
+    #     with open("red_sparse_diff.txt", "a", encoding="utf-8") as f:
+    #         f.write("{}\t{:.1g}\t{}\t{:.1g}\t{:.3g}\n".format(img_id, noise_var, basis, thr_coeff, diff_sq))
 
     # result = compressive_tv_alt(measurement, mt_op, src_img.shape, alpha=1e-6)
-    # print(np.linalg.norm(result - src_img)**2)
+    # # print(np.linalg.norm(result - src_img)**2)
     # plt.imshow(result, cmap=plt.cm.gray)
     # plt.show()
 
-
     # result = sparse_reduction(measurement, mt_op, src_img.shape,
-    #                           thresholding_coeff=1e-3, basis="eig")
+    #                           thresholding_coeff=0.01, basis="eig")
+    result = sparse_reduction(measurement, mt_op, src_img.shape,
+                               thresholding_coeff=0.1, basis="eig")
     # src_img = load_demo_image(img_id, pad_by=32)
     # print(np.linalg.norm(result - src_img)**2)
 
-    # plt.imshow(result, cmap=plt.cm.gray)
+    # result = np.linalg.lstsq(mt_op, measurement, rcond=None)[0].reshape(src_img.shape)
 
-    # plt.show()
+    plt.imshow(result, cmap=plt.cm.gray)
+
+    plt.show()
 
 
 if __name__ == "__main__":
