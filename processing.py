@@ -9,8 +9,10 @@ from collections import defaultdict
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint
 from scipy.fft import dctn, idctn #pylint: disable=E0611
+from scipy.stats.qmc import Sobol
 from haar_transform import haar_transform, haar_transform_2d, inverse_haar_transform, inverse_haar_transform_2d
 from scipy.sparse.linalg import lsmr
+from imageio import imread
 import cvxpy as cp
 from cvxpy.atoms.affine.sum import sum as cp_sum
 from cvxpy.atoms.affine.diff import diff as cp_diff
@@ -200,25 +202,65 @@ def figure_name_format(img_id, noise_var=0., kind="", alpha=None, other_params=N
     return name
 
 
-def prepare_measurements(img_id: int = 3, noise_var: float = 0):
-    if img_id == 6 or img_id == 7:
-        src_img = load_demo_image(img_id)
-    else:
-        src_img = load_demo_image(img_id, pad_by=32)
+def build_pseudorandom_patterns(n_patterns: int, shape):
     rng = np.random.default_rng(2021)
-    n_patterns = 1024
-    size = 2.5 * 50. / 4
-
-    propagate_func = propagator(src_img.shape[0])
-
-    illum_patterns = rng.integers(0, 1, size=(n_patterns,) + src_img.shape, endpoint=True)
+    propagate_func = propagator(shape[0])
+    illum_patterns = rng.integers(0, 1, size=(n_patterns,) + shape,
+                                      endpoint=True)
     for i in range(n_patterns):
         illum_patterns[i, ...] = propagate_func(illum_patterns[i, ...])
+    return illum_patterns
+
+
+def build_quasirandom_patterns(n_patterns: int, shape):
+    propagate_func = propagator(shape[0])
+
+    gen = Sobol(shape[0]*shape[1], scramble=False, seed=2021).fast_forward(2)
+    illum_patterns = (gen.random(n_patterns) >= 0.5).reshape((n_patterns,) + shape).astype(float)
+
+    for i in range(n_patterns):
+        illum_patterns[i, ...] = propagate_func(illum_patterns[i, ...])
+    return illum_patterns
+
+
+def load_speckle_patterns(n_patterns: int):
+    illum_patterns = []
+    print("Loading speckle patterns")
+    try:
+        for pattern_no in range(n_patterns):
+            illum_patterns.append(imread("speckle_patterns/slm{}.bmp".format(pattern_no), as_gray=True))
+    except FileNotFoundError:
+        raise ValueError("Not enough speckle pattern data for {} patterns.".format(n_patterns))
+    illum_patterns = np.array(illum_patterns)
+    return illum_patterns
+
+
+def prepare_measurements(img_id: int = 3, noise_var: float = 0, n_patterns: int = 1024, pattern_type: str="pseudorandom"):
+    if pattern_type == "speckle":
+        illum_patterns = load_speckle_patterns(n_patterns)
+        src_img = load_demo_image(img_id)
+        if illum_patterns.shape[1] != src_img.shape[0]:
+            diff = (illum_patterns.shape[1] - src_img.shape[0])//2
+            src_img = load_demo_image(img_id, pad_by=diff)
+        size = 5.2 * illum_patterns.shape[1]/2 # μm
+    else:
+        if img_id == 6 or img_id == 7:
+            src_img = load_demo_image(img_id)
+        else:
+            src_img = load_demo_image(img_id, pad_by=32)
+        size = 2.5 * 50. / 4
+
+        if pattern_type == "pseudorandom":
+            illum_patterns = build_pseudorandom_patterns(n_patterns, src_img.shape)
+        elif pattern_type == "quasirandom":
+            illum_patterns = build_quasirandom_patterns(n_patterns, src_img.shape)
+
+
     mt_op = illum_patterns.reshape((n_patterns, -1))
     measurement = mt_op.dot(src_img.ravel())
 
-    np.random.seed(2021)
     if noise_var > 0:
+        rng = np.random.default_rng(2021)
         measurement += rng.normal(scale=noise_var**0.5, size=measurement.shape)
 
     return mt_op, illum_patterns, measurement, src_img, size
