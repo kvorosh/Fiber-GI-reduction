@@ -47,7 +47,7 @@ def compressive_l1(measurement, mt_op, img_shape, alpha=None, full: bool = False
     try:
         prob.solve()
     except cp.error.SolverError:
-        prob.solve(solver="ECOS")
+        prob.solve(solver=cp.ECOS)
     result_dct = dct_f.value.reshape(img_shape)
     result = idctn(result_dct, axes=(0, 1), norm="ortho")
     if full and alpha is not None:
@@ -81,7 +81,7 @@ def compressive_l1_haar(measurement, mt_op, img_shape, alpha=None, full=False):
     try:
         prob.solve()
     except cp.error.SolverError:
-        prob.solve(solver="ECOS")
+        prob.solve(solver=cp.ECOS)
     result_haar = haar_f.value.reshape(img_shape)
     result = inverse_haar_transform_2d(result_haar)
     if full:
