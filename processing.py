@@ -7,6 +7,7 @@ Created on Fri Apr 23 16:26:32 2021
 
 from collections import defaultdict
 from os import remove
+from time import perf_counter
 import logging
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint
