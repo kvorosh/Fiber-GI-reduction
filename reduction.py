@@ -3,21 +3,21 @@
 Created on Sat Jul 31 00:03:07 2021
 """
 
+import logging
 from functools import partial
 from time import perf_counter
-import logging
-import numpy as np
-from scipy.sparse.linalg import lsmr
-from scipy.fftpack import dct, idct
-from haar_transform import haar_transform, haar_transform_2d, inverse_haar_transform_2d
+
 import cvxpy as cp
-from cvxpy.atoms.affine.sum import sum as cp_sum
+import numpy as np
 from cvxpy.atoms.affine.diff import diff as cp_diff
 from cvxpy.atoms.affine.reshape import reshape as cp_reshape
-from cvxpy.atoms import norm as cp_norm
 from cvxpy.atoms.norm1 import norm1 as cp_norm1
+from scipy.fftpack import dct, idct
+from scipy.sparse.linalg import lsmr
 from tqdm import trange
 
+from haar_transform import (haar_transform, haar_transform_2d,
+                            inverse_haar_transform_2d)
 
 logger = logging.getLogger("Fiber-GI-reduction.reduction")
 

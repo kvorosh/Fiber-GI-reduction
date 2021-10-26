@@ -3,12 +3,11 @@
 @author: balakin
 """
 
-import numpy as np
-from scipy.linalg import toeplitz
-from imageio import imread, imwrite
-import matplotlib.pyplot as plt
 from functools import partial
-from scipy.stats import norm
+
+import matplotlib.pyplot as plt
+import numpy as np
+from imageio import imread, imwrite
 
 
 def load_demo_image(img_id=0, full_span=False, pad_by=0):

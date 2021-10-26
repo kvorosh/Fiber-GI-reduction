@@ -5,29 +5,30 @@ Created on Fri Apr 23 16:26:32 2021
 @author: balakin
 """
 
+import logging
 from collections import defaultdict
 from os import remove
 from time import perf_counter
-import logging
-import numpy as np
-from scipy.optimize import minimize, LinearConstraint
-from scipy.fft import dctn, idctn #pylint: disable=E0611
-from scipy.stats.qmc import Sobol
-from haar_transform import haar_transform, haar_transform_2d, inverse_haar_transform, inverse_haar_transform_2d
-from scipy.sparse.linalg import lsmr
-from imageio import imread
+
 import cvxpy as cp
-from cvxpy.atoms.affine.sum import sum as cp_sum
+import matplotlib.pyplot as plt
+import numpy as np
+from cvxpy.atoms import norm as cp_norm
 from cvxpy.atoms.affine.diff import diff as cp_diff
 from cvxpy.atoms.affine.reshape import reshape as cp_reshape
-from cvxpy.atoms import norm as cp_norm
+from cvxpy.atoms.affine.sum import sum as cp_sum
 from cvxpy.atoms.norm1 import norm1 as cp_norm1
-import matplotlib.pyplot as plt
+from imageio import imread
+from scipy.fft import dctn, idctn  # pylint: disable=E0611
+from scipy.optimize import LinearConstraint, minimize
+from scipy.sparse.linalg import lsmr
+from scipy.stats.qmc import Sobol
 from tqdm import tqdm
-from misc import load_demo_image, save_image_for_show
-from fiber_propagation import propagator
-from reduction import dense_reduction, sparse_reduction, dense_reduction_iter
 
+from fiber_propagation import propagator
+from haar_transform import haar_transform, inverse_haar_transform_2d
+from misc import load_demo_image, save_image_for_show
+from reduction import dense_reduction, dense_reduction_iter, sparse_reduction
 
 logger = logging.getLogger("Fiber-GI-reduction")
 logger.propagate = False # Do not propagate to the root logger
@@ -617,7 +618,7 @@ def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type
 
     # result = np.linalg.lstsq(mt_op, measurement, rcond=None)[0].reshape(src_img.shape)
 
-    plt.imshow(result, cmap=plt.cm.gray)
+    plt.imshow(result, cmap=plt.cm.gray) # pylint: disable=E1101
 
     plt.show()
 
