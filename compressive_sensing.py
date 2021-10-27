@@ -9,6 +9,9 @@ import logging
 from typing import Optional
 
 import cvxpy as cp
+from cvxpy.atoms import norm as cp_norm
+from cvxpy.atoms.affine.diff import diff as cp_diff
+from cvxpy.atoms.affine.reshape import reshape as cp_reshape
 from cvxpy.atoms.affine.sum import sum as cp_sum
 from cvxpy.atoms.norm1 import norm1 as cp_norm1
 import numpy as np
@@ -181,3 +184,31 @@ class GICompressiveSensingL1Haar(GICompressiveSensing):
         estimate = super()._postprocess(estimate)
         estimate = inverse_haar_transform_2d(estimate)
         return estimate
+
+
+class GICompressiveTC2(GICompressiveSensing):
+    """
+    Compressive sensing for the case when the regularization term
+    is total squared curvature of the image.
+
+    Parameters
+    ----------
+    model : GIMeasurementModel
+        The ghost image measurement model on which to base the processing.
+
+    Class attributes
+    ----------------
+    name : str
+        Short name, typically used to refer to method's results when saving
+        it to a file.
+    desc : str
+        Description of a method to use for plotting.
+    """
+    name = "tc2"
+    desc = "Сжатые измерения, мин. полной квадратичной кривизны"
+
+    def _regularization_term(self, estimate):
+        estimate = cp_reshape(estimate, self._measurement_model.img_shape)
+        sparsity_term = (cp_norm(cp_diff(estimate, k=2, axis=0), 2)
+                         + cp_norm(cp_diff(estimate, k=2, axis=1), 2))
+        return sparsity_term
