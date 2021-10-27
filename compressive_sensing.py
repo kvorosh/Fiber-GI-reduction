@@ -15,6 +15,7 @@ import numpy as np
 from scipy.fft import dctn, idctn  # pylint: disable=E0611
 
 from measurement_model import GIProcessingMethod
+from haar_transform import haar_transform, inverse_haar_transform_2d
 
 logger = logging.getLogger("Fiber-GI-reduction.cs")
 
@@ -131,4 +132,52 @@ class GICompressiveSensingL1DCT(GICompressiveSensing):
     def _postprocess(self, estimate) -> np.ndarray:
         estimate = super()._postprocess(estimate)
         estimate = idctn(estimate, axes=(0, 1), norm="ortho")
+        return estimate
+
+
+class GICompressiveSensingL1Haar(GICompressiveSensing):
+    """
+    Compressive sensing for the case when the regularization term
+    is the L1 norm of the image in Haar basis.
+
+    Note
+    ----
+    Image dimensions have to be powers of 2.
+
+    Parameters
+    ----------
+    model : GIMeasurementModel
+        The ghost image measurement model on which to base the processing.
+
+    Class attributes
+    ----------------
+    name : str
+        Short name, typically used to refer to method's results when saving
+        it to a file.
+    desc : str
+        Description of a method to use for plotting.
+    """
+    name = "l1h"
+    desc = "Сжатые измерения, мин. нормы L1 в базисе Хаара"
+
+    def _mt_op(self, n_patterns: Optional[int]=None) -> np.ndarray:
+        mt_op = super()._mt_op(n_patterns)
+        tmp_op = mt_op.reshape((-1,) + self._measurement_model.img_shape)
+        back_transform_matrix = haar_transform(np.eye(self._measurement_model.img_shape[0]), axis=0,
+                                               inplace=True)
+        mt_op_haar = np.tensordot(tmp_op, back_transform_matrix, axes=(1, 0))
+        if self._measurement_model.img_shape[1] != self._measurement_model.img_shape[0]:
+            back_transform_matrix = haar_transform(
+                np.eye(self._measurement_model.img_shape[1]), axis=0, inplace=True
+            )
+        mt_op_haar = np.tensordot(mt_op_haar, back_transform_matrix, axes=(1, 0))
+        mt_op_haar = mt_op_haar.reshape((-1, self._measurement_model.mt_op.shape[1]))
+        return mt_op_haar
+
+    def _regularization_term(self, estimate):
+        return cp_norm1(estimate)**2
+
+    def _postprocess(self, estimate) -> np.ndarray:
+        estimate = super()._postprocess(estimate)
+        estimate = inverse_haar_transform_2d(estimate)
         return estimate
