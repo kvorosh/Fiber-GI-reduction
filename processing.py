@@ -260,6 +260,10 @@ def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 
     else:
         img_shape = (128, 128)
 
+    if not isinstance(data_source, int):
+        measurement = data_source
+        n_patterns = measurement.size
+
     mt_op, size, img_shape = build_measurement_model(n_patterns, img_shape, pattern_type)
 
     if isinstance(data_source, int):
@@ -275,7 +279,6 @@ def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 
             measurement += rng.normal(scale=noise_var**0.5, size=measurement.shape)
         return mt_op, measurement, src_img, size
     else:
-        measurement = data_source
         return mt_op, measurement, img_shape, size
 
 
