@@ -440,7 +440,7 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
     plt.show()
 
 
-def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show: bool=True, pattern_type: str="pseudorandom"):
+def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show: bool=True, pattern_type: str="pseudorandom") -> None:
     mt_op, illum_patterns, measurement, src_img, size = prepare_measurements(
         img_id=img_id, noise_var=noise_var,
         n_patterns=n_patterns,
@@ -553,7 +553,7 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
         plt.show()
 
 
-def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom"):
+def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:
     mt_op, _, measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var, n_patterns=n_measurements,
         pattern_type=pattern_type
@@ -589,7 +589,8 @@ def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type
     plt.show()
 
 
-def se_calculations(img_id=3, noise_var=0.1, tau_value=0.1, pattern_type: str="pseudorandom"):
+def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
+                    pattern_type: str="pseudorandom") -> None:
 
     output = "../data/se_{}_{}_{:.0e}_{:.0e}.dat".format(img_id, pattern_type[0], noise_var, tau_value)
     intermediate_results = "../data/_se_{}_{}_{:.0e}_{:.0e}.dat".format(img_id, pattern_type[0], noise_var, tau_value)
