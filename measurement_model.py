@@ -259,3 +259,40 @@ class GIProcessingMethod:
         raise NotImplementedError("Not implemented in the general case!")
 
 
+class TraditionalGI(GIProcessingMethod):
+    """
+    Ghost image formation using the traditional approach, that is,
+    summation of the illumination patterns weighted by the corresponding
+    measurement components after subtracting the mean.
+
+    Parameters
+    ----------
+    model : GIMeasurementModel
+        The ghost image measurement model on which to base the processing.
+    """
+    name = "gi"
+    desc = "Обычное ФИ"
+
+    def __call__(self, measurement) -> np.ndarray: # pylint: disable=W0221
+        """
+        Process the measurement using the traditional approach, that is,
+        summation of the illumination patterns weighted by the corresponding
+        measurement components after subtracting the mean.
+        If the measurement is shorter than the available number of patterns,
+        only the first `measurement.size` ones are used.
+
+        Parameters
+        ----------
+        measurement : array_like
+            The measurement.
+
+        Returns
+        -------
+        result : numpy.ndarray
+            The processing result.
+        """
+        illum_patterns = self._measurement_model.illumination_patterns(measurement.size)
+        result = np.tensordot(measurement - measurement.mean(),
+                              illum_patterns - illum_patterns.mean(axis=0),
+                              axes=1)/measurement.size
+        return result
