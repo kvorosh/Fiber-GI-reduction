@@ -518,6 +518,7 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
     except AttributeError:
         img_shape = src_img
         src_img = None
+        img_id = None
 
     illum_patterns = mt_op.reshape((-1,) + img_shape)
     traditional_gi = np.tensordot(measurement - measurement.mean(),
@@ -556,6 +557,7 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
                   (6, 0.): 1.0, (6, 0.1): 1,
                   (7, 0.): 10.0, (7, 0.1): 1.,
                   (8, 0.): 1e-05, (8, 0.1): 1e-5}
+    tau_values = defaultdict(lambda: 1., tau_values)
 
     estimate_red_dense = dense_reduction(measurement, mt_op, img_shape)
     estimate_red_sparse = sparse_reduction(measurement, mt_op, img_shape,
