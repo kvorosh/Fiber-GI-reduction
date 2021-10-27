@@ -181,5 +181,7 @@ def sparse_reduction(measurement, mt_op, img_shape, thresholding_coeff=1.,
     except cp.error.SolverError:
         prob.solve(solver=cp.ECOS)
     t_end = perf_counter()
-    logger.info("Sparse reduction took {:.3g} s".format(t_end - t_start))
+    logger.info("Sparse reduction took {:.3g} s for A shape {}".format(
+        t_end - t_start, mt_op.shape
+    ))
     return f.value.reshape(img_shape)
