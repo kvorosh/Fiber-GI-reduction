@@ -676,7 +676,7 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
     intermediate_results = "../data/_se_{}_{}_{:.0e}_{:.0e}.dat".format(img_id, pattern_type[0], noise_var, tau_value)
     max_n_patterns = 13000
     total_mt_op, total_measurement, src_img, _ = prepare_measurements(
-        img_id=img_id, noise_var=noise_var, n_patterns=max_n_patterns,
+        img_id, noise_var=noise_var, n_patterns=max_n_patterns,
         pattern_type=pattern_type
     )
 
