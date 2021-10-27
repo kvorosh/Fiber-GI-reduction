@@ -179,7 +179,6 @@ def compressive_tv_alt(measurement, mt_op, img_shape, alpha=None, full=False):
         fidelity = cp_sum((measurement - mt_op @ f)**2)
         objective = cp.Minimize(alpha*sparsity_term + fidelity)
         prob = cp.Problem(objective)
-    # prob.solve(solver=cp.ECOS)
     prob.solve()
     result = f.value.reshape(img_shape)
     if full and alpha is not None:
@@ -454,29 +453,6 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
 
     # whitened_measurement = noise_var**0.5 * measurement
 
-    # left_sing, sing_val, right_sing = np.linalg.svd(noise_var**0.5 * mt_op,
-    #                                                 full_matrices=False)
-
-    # sing_val2 = 1/sing_val
-    # rxi = (right_sing.T * sing_val2) @ left_sing.T @ whitened_measurement
-
-    # eigv_num = 512
-    # sing_val2 = 1/sing_val[: eigv_num]
-    # rxi = (right_sing[: eigv_num, :].T * sing_val2) @ left_sing[:, : eigv_num].T @ whitened_measurement
-    # rxi_alt = np.linalg.lstsq(mt_op, measurement, rcond=None)[0]
-    # print(np.linalg.norm(rxi - rxi_alt), np.linalg.norm(rxi))
-
-    # rxi_cov_op = mt_op.T.dot(mt_op)*noise_var
-    # eigval, eigvec = np.linalg.eigh(rxi_cov_op)
-    # print(eigval.shape, eigvec.shape)
-    # tmp = eigvec.T[: eigv_num, :].dot(rxi)
-    # print(tmp.shape)
-    # rxi = eigvec[:, : eigv_num].dot(tmp)
-
-    # omega = np.linalg.norm(src_img)**(-2) # ~1.3e-3 for the image of two slits
-    # print(omega)
-    # rxi = synth(measurement, mt_op, noise_var, omega)
-
     alpha_values = {("tc2", 3, 1e-1): 6e-3, ("tva2", 3, 1e-1): 0.158,
                     ("tc2", 2, 1e-1): 1e-3, ("tva2", 2, 1e-1): 0.158,
                     ("tc2", 6, 1e-1): 6e-3,
@@ -576,13 +552,9 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
     # ))
         plt.show()
 
-    # for omega in [1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3]:
-    #     estimate = synth(measurement, mt_op, src_img.shape, 1., omega)
-    #     save_image_for_show(estimate, "synth_{:.0e}".format(omega), rescale=True)
-
 
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom"):
-    mt_op, illum_patterns, measurement, src_img, size = prepare_measurements(
+    mt_op, _, measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var, n_patterns=n_measurements,
         pattern_type=pattern_type
     )
@@ -606,17 +578,11 @@ def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type
 
     # result = compressive_tv_alt(measurement, mt_op, src_img.shape, alpha=1e-6)
     # # print(np.linalg.norm(result - src_img)**2)
-    # plt.imshow(result, cmap=plt.cm.gray)
-    # plt.show()
 
-    # result = sparse_reduction(measurement, mt_op, src_img.shape,
-    #                           thresholding_coeff=0.01, basis="eig")
     result = sparse_reduction(measurement, mt_op, src_img.shape,
                                thresholding_coeff=0.1, basis="eig")
     # src_img = load_demo_image(img_id, pad_by=32)
     # print(np.linalg.norm(result - src_img)**2)
-
-    # result = np.linalg.lstsq(mt_op, measurement, rcond=None)[0].reshape(src_img.shape)
 
     plt.imshow(result, cmap=plt.cm.gray) # pylint: disable=E1101
 
