@@ -224,3 +224,38 @@ def pad_or_trim_to_shape(img, shape: Tuple[int, int]) -> np.ndarray:
                       (to_add_1//2, to_add_1 - to_add_1//2)),
                      mode="constant", constant_values=0.)
     return img
+
+
+class GIProcessingMethod:
+    """
+    An abstract class for various methods used to process the measurement data
+    into the ghost image based on them.
+
+    Parameters
+    ----------
+    model : GIMeasurementModel
+        The ghost image measurement model on which to base the processing.
+
+    Class attributes
+    ----------------
+    name : str
+        Short name, typically used to refer to method's results when saving
+        it to a file.
+    desc : str
+        Description of a method to use for plotting.
+    """
+    name = ""
+    desc = ""
+
+    def __init__(self, model: GIMeasurementModel):
+        self._measurement_model = model
+
+    def _mt_op(self, n_patterns: Optional[int]=None) -> np.ndarray:
+        if n_patterns is None:
+            return self._measurement_model.mt_op
+        return self._measurement_model.mt_op_part(n_patterns)
+
+    def __call__(self, measurement, *args, **kwargs) -> np.ndarray:
+        raise NotImplementedError("Not implemented in the general case!")
+
+
