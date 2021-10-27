@@ -10,7 +10,9 @@ from typing import Optional
 
 import cvxpy as cp
 from cvxpy.atoms.affine.sum import sum as cp_sum
+from cvxpy.atoms.norm1 import norm1 as cp_norm1
 import numpy as np
+from scipy.fft import dctn, idctn  # pylint: disable=E0611
 
 from measurement_model import GIProcessingMethod
 
@@ -92,3 +94,41 @@ class GICompressiveSensing(GIProcessingMethod):
             return result, fidelity, sparsity
         else:
             return result
+
+
+class GICompressiveSensingL1DCT(GICompressiveSensing):
+    """
+    Compressive sensing for the case when the regularization term
+    is the L1 norm of the image in DCT basis.
+
+    Parameters
+    ----------
+    model : GIMeasurementModel
+        The ghost image measurement model on which to base the processing.
+
+    Class attributes
+    ----------------
+    name : str
+        Short name, typically used to refer to method's results when saving
+        it to a file.
+    desc : str
+        Description of a method to use for plotting.
+    """
+    name = "l1"
+    desc = "Сжатые измерения, мин. нормы L1 в базисе DCT"
+
+    def _mt_op(self, n_patterns: Optional[int]=None) -> np.ndarray:
+        mt_op = super()._mt_op(n_patterns)
+        tmp_op = mt_op.T.reshape(self._measurement_model.img_shape + (-1,))
+        mt_op_dct = dctn(tmp_op, axes=(0, 1), norm="ortho").reshape( # pylint: disable=E1101
+            (self._measurement_model.img_shape[0]*self._measurement_model.img_shape[1], -1)
+        ).T
+        return mt_op_dct
+
+    def _regularization_term(self, estimate):
+        return cp_norm1(estimate)**2
+
+    def _postprocess(self, estimate) -> np.ndarray:
+        estimate = super()._postprocess(estimate)
+        estimate = idctn(estimate, axes=(0, 1), norm="ortho")
+        return estimate
