@@ -282,7 +282,7 @@ def prepare_measurements(img_id: int = 3, noise_var: float = 0, n_patterns: int 
         rng = np.random.default_rng(2021)
         measurement += rng.normal(scale=noise_var**0.5, size=measurement.shape)
 
-    return mt_op, illum_patterns, measurement, src_img, size
+    return mt_op, measurement, src_img, size
 
 
 def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") -> None:
@@ -308,7 +308,7 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
                          "tva": compressive_tv_alt, "l1h": compressive_l1_haar,
                          "tva2": compressive_tv_alt2}
 
-    mt_op, _, measurement, src_img, _ = prepare_measurements(
+    mt_op, measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var
     )
     # estimate = processing_method[proc_kind](measurement, mt_op, src_img.shape,
@@ -357,7 +357,7 @@ def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0,
                          "tva": compressive_tv_alt, "l1h": compressive_l1_haar,
                          "tva2": compressive_tv_alt2}[proc_kind]
 
-    mt_op, _, measurement, src_img, _ = prepare_measurements(
+    mt_op, measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var
     )
 
@@ -419,7 +419,7 @@ def plot_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1",
 
 
 def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
-    mt_op, _, measurement, src_img, _ = prepare_measurements(
+    mt_op, measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var
     )
     for relax in [1.]:
@@ -441,12 +441,13 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
 
 
 def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show: bool=True, pattern_type: str="pseudorandom") -> None:
-    mt_op, illum_patterns, measurement, src_img, size = prepare_measurements(
+    mt_op, measurement, src_img, size = prepare_measurements(
         img_id=img_id, noise_var=noise_var,
         n_patterns=n_patterns,
         pattern_type=pattern_type
     )
 
+    illum_patterns = mt_op.reshape((-1,) + src_img.shape)
     traditional_gi = np.tensordot(measurement - measurement.mean(),
                                   illum_patterns - illum_patterns.mean(axis=0),
                                   axes=1)/measurement.size
@@ -554,7 +555,7 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
 
 
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:
-    mt_op, _, measurement, src_img, _ = prepare_measurements(
+    mt_op, measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var, n_patterns=n_measurements,
         pattern_type=pattern_type
     )
@@ -595,7 +596,7 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
     output = "../data/se_{}_{}_{:.0e}_{:.0e}.dat".format(img_id, pattern_type[0], noise_var, tau_value)
     intermediate_results = "../data/_se_{}_{}_{:.0e}_{:.0e}.dat".format(img_id, pattern_type[0], noise_var, tau_value)
     max_n_patterns = 13000
-    total_mt_op, total_illum_patterns, total_measurement, src_img, _ = prepare_measurements(
+    total_mt_op, total_measurement, src_img, _ = prepare_measurements(
         img_id=img_id, noise_var=noise_var, n_patterns=max_n_patterns,
         pattern_type=pattern_type
     )
@@ -629,7 +630,7 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
                               total=len(n_patterns_values)):
         measurement = total_measurement[: n_patterns]
         mt_op = total_mt_op[: n_patterns, ...]
-        illum_patterns = total_illum_patterns[: n_patterns, ...]
+        illum_patterns = mt_op.reshape((-1,) + src_img.shape)
         se_results[i, 0] = n_patterns
 
         # Traditional ghost imaging
