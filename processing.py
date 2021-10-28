@@ -10,23 +10,19 @@ from collections import defaultdict
 from os import remove
 from time import perf_counter
 
-import cvxpy as cp
 import matplotlib.pyplot as plt
 import numpy as np
-from cvxpy.atoms import norm as cp_norm
-from cvxpy.atoms.affine.diff import diff as cp_diff
-from cvxpy.atoms.affine.reshape import reshape as cp_reshape
-from cvxpy.atoms.affine.sum import sum as cp_sum
-from cvxpy.atoms.norm1 import norm1 as cp_norm1
-from scipy.fft import dctn, idctn  # pylint: disable=E0611
 from scipy.optimize import LinearConstraint, minimize
 from scipy.sparse.linalg import lsmr
 from tqdm import tqdm
 
-from haar_transform import haar_transform, inverse_haar_transform_2d
 from misc import load_demo_image, save_image_for_show
 from reduction import dense_reduction, dense_reduction_iter, sparse_reduction
-from measurement_model import GIMeasurementModel, pad_or_trim_to_shape
+from measurement_model import GIMeasurementModel, pad_or_trim_to_shape, TraditionalGI
+from compressive_sensing import (GICompressiveSensingL1DCT,
+                                 GICompressiveSensingL1Haar, GICompressiveTC2,
+                                 GICompressiveAnisotropicTotalVariation,
+                                 GICompressiveAnisotropicTotalVariation2)
 
 logger = logging.getLogger("Fiber-GI-reduction")
 logger.propagate = False # Do not propagate to the root logger
@@ -47,87 +43,6 @@ def synth(measurement, mt_op, img_shape, noise_var, omega):
     tmp_op = mt_op.dot(mt_op.T).astype(float)
     tmp_op[np.diag_indices_from(tmp_op)] += noise_var*omega
     return mt_op.T.dot(np.linalg.solve(tmp_op, measurement)).reshape(img_shape)
-
-
-def compressive_l1(measurement, mt_op, img_shape, alpha=None, full: bool = False):
-    tmp_op = mt_op.T.reshape(img_shape + (-1,))
-    mt_op_dct = dctn(tmp_op, axes=(0, 1), norm="ortho").reshape((img_shape[0]*img_shape[1], -1)).T #pylint: disable=E1101
-
-    dct_f = cp.Variable(mt_op_dct.shape[1])
-    sparsity_term = cp_norm1(dct_f)**2
-    if alpha is None:
-        objective = cp.Minimize(sparsity_term)
-        constraints = [mt_op_dct @ dct_f == measurement]
-        prob = cp.Problem(objective, constraints)
-    else:
-        fidelity = cp_sum((measurement - mt_op_dct @ dct_f)**2)
-        objective = cp.Minimize(alpha*sparsity_term + fidelity)
-        prob = cp.Problem(objective)
-    try:
-        prob.solve()
-    except cp.error.SolverError:
-        prob.solve(solver=cp.ECOS)
-    result_dct = dct_f.value.reshape(img_shape)
-    result = idctn(result_dct, axes=(0, 1), norm="ortho")
-    if full and alpha is not None:
-        return result, fidelity.value, sparsity_term.value
-    else:
-        return result
-
-
-def compressive_l1_haar(measurement, mt_op, img_shape, alpha=None, full=False):
-    tmp_op = mt_op.reshape((-1,) + img_shape)
-    # Assuming that both elements of img_shape are powers of 2.
-    back_transform_matrix = haar_transform(np.eye(img_shape[0]), axis=0,
-                                           inplace=True)
-    mt_op_haar = np.tensordot(tmp_op, back_transform_matrix, axes=(1, 0))
-    if img_shape[1] != img_shape[0]:
-        back_transform_matrix = haar_transform(np.eye(img_shape[1]), axis=0,
-                                               inplace=True)
-    mt_op_haar = np.tensordot(mt_op_haar, back_transform_matrix, axes=(1, 0))
-    mt_op_haar = mt_op_haar.reshape((-1, img_shape[0]*img_shape[1]))
-
-    haar_f = cp.Variable(mt_op_haar.shape[1])
-    sparsity_term = cp_norm1(haar_f)**2
-    if alpha is None:
-        objective = cp.Minimize(sparsity_term)
-        constraints = [mt_op_haar @ haar_f == measurement]
-        prob = cp.Problem(objective, constraints)
-    else:
-        fidelity = cp_sum((measurement - mt_op_haar @ haar_f)**2)
-        objective = cp.Minimize(alpha*sparsity_term + fidelity)
-        prob = cp.Problem(objective)
-    try:
-        prob.solve()
-    except cp.error.SolverError:
-        prob.solve(solver=cp.ECOS)
-    result_haar = haar_f.value.reshape(img_shape)
-    result = inverse_haar_transform_2d(result_haar)
-    if full:
-        return result, fidelity.value, sparsity_term.value
-    else:
-        return result
-
-
-def compressive_tc2(measurement, mt_op, img_shape, alpha=None, full=False):
-    f = cp.Variable(mt_op.shape[1])
-    f2 = cp_reshape(f, img_shape)
-    sparsity_term = (cp_norm(cp_diff(f2, k=2, axis=0), 2)
-                     + cp_norm(cp_diff(f2, k=2, axis=1), 2))
-    if alpha is None:
-        objective = cp.Minimize(sparsity_term)
-        constraints = [mt_op @ f == measurement]
-        prob = cp.Problem(objective, constraints)
-    else:
-        fidelity = cp_norm(measurement - mt_op @ f, 2)
-        objective = cp.Minimize(alpha*sparsity_term + fidelity)
-        prob = cp.Problem(objective)
-    prob.solve()
-    result = f.value.reshape(img_shape)
-    if full and alpha is not None:
-        return result, fidelity.value, sparsity_term.value
-    else:
-        return result
 
 
 def compressive_tv(measurement, mt_op, img_shape, alpha=None):
@@ -162,47 +77,6 @@ def compressive_tv(measurement, mt_op, img_shape, alpha=None):
         res = minimize(combined_obj_func, initial_estimate, jac=True, options={"disp": True})
 
     return res.x.reshape(img_shape)
-
-
-def compressive_tv_alt(measurement, mt_op, img_shape, alpha=None, full=False):
-    f = cp.Variable(mt_op.shape[1])
-    f2 = cp_reshape(f, img_shape)
-    sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
-                     + cp_norm1(cp_diff(f2, k=1, axis=1)))**2
-    if alpha is None:
-        objective = cp.Minimize(sparsity_term)
-        constraints = [mt_op @ f == measurement]
-        prob = cp.Problem(objective, constraints)
-    else:
-        fidelity = cp_sum((measurement - mt_op @ f)**2)
-        objective = cp.Minimize(alpha*sparsity_term + fidelity)
-        prob = cp.Problem(objective)
-    prob.solve()
-    result = f.value.reshape(img_shape)
-    if full and alpha is not None:
-        return result, fidelity.value, sparsity_term.value
-    else:
-        return result
-
-
-def compressive_tv_alt2(measurement, mt_op, img_shape, alpha=None, full=False):
-    f = cp.Variable(mt_op.shape[1])
-    f2 = cp_reshape(f, img_shape)
-    sparsity_term = cp.atoms.total_variation.tv(f2)**2
-    if alpha is None:
-        objective = cp.Minimize(sparsity_term)
-        constraints = [mt_op @ f == measurement]
-        prob = cp.Problem(objective, constraints)
-    else:
-        fidelity = cp_sum((measurement - mt_op @ f)**2)
-        objective = cp.Minimize(alpha*sparsity_term + fidelity)
-        prob = cp.Problem(objective)
-    prob.solve(solver=cp.SCS)
-    result = f.value.reshape(img_shape)
-    if full and alpha is not None:
-        return result, fidelity.value, sparsity_term.value
-    else:
-        return result
 
 
 def figure_name_format(img_id, noise_var=0., kind="", alpha=None,
@@ -257,28 +131,28 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
     -------
     None
     """
-    processing_method = {"l1": compressive_l1, "tc2": compressive_tc2,
-                         "tva": compressive_tv_alt, "l1h": compressive_l1_haar,
-                         "tva2": compressive_tv_alt2}
 
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var
     )
+    processing_method = {m.name: m(model) for m in [GICompressiveSensingL1DCT,
+                                                    GICompressiveSensingL1Haar,
+                                                    GICompressiveTC2,
+                                                    GICompressiveAnisotropicTotalVariation,
+                                                    GICompressiveAnisotropicTotalVariation2]}
 
     if not isinstance(img_id, int):
         img_id = None
 
     for alpha in [1e-9, 1e-6, 1e-3, 1e-1, 1, 1e1]:
-        estimate = processing_method[proc_kind](measurement, model.mt_op,
-                                                model.img_shape, alpha=alpha)
+        estimate = processing_method[proc_kind](measurement, alpha=alpha)
         save_image_for_show(
             estimate, figure_name_format(img_id, noise_var, proc_kind,
                                          alpha=alpha),
             rescale=True
         )
-    logger.info("Done for imd_id = {}, noise_var = {} and proc_kind = {}".format(
-        img_id, noise_var, proc_kind
-    ))
+    logger.info("Done for imd_id = %s, noise_var = %.3g and proc_kind = %s",
+                img_id, noise_var, proc_kind)
 
 
 def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0,
@@ -304,13 +178,15 @@ def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0,
     None
 
     """
-    processing_method = {"l1": compressive_l1, "tc2": compressive_tc2,
-                         "tva": compressive_tv_alt, "l1h": compressive_l1_haar,
-                         "tva2": compressive_tv_alt2}[proc_kind]
-
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var
     )
+    processing_method = {m.name: m(model)
+                         for m in [GICompressiveSensingL1DCT,
+                                   GICompressiveSensingL1Haar,
+                                   GICompressiveTC2,
+                                   GICompressiveAnisotropicTotalVariation,
+                                   GICompressiveAnisotropicTotalVariation2]}[proc_kind]
 
     if not isinstance(img_id, int):
         img_id = None
@@ -321,8 +197,7 @@ def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0,
     #TODO Try a parallel execution of the loop body
     # Though it will likely fail due to lack of memory
     for alpha in tqdm(alpha_values):
-        _, resid, reg = processing_method(measurement, model.mt_op, model.img_shape,
-                                          alpha=alpha, full=True)
+        _, resid, reg = processing_method(measurement, alpha=alpha, full=True)
         residuals.append(resid)
         reg_terms.append(reg)
 
@@ -412,10 +287,7 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
         img_id = None
         src_img = None
 
-    illum_patterns = model.illumination_patterns()
-    traditional_gi = np.tensordot(measurement - measurement.mean(),
-                                  illum_patterns - illum_patterns.mean(axis=0),
-                                  axes=1)/measurement.size
+    traditional_gi = TraditionalGI(model)(measurement)
 
     # whitened_measurement = noise_var**0.5 * measurement
 
@@ -431,17 +303,16 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
 
     estimates = {}
 
-    for processing_method, proc_method_name in zip(
-            [compressive_l1,
-             # compressive_l1_haar,
-             compressive_tc2, compressive_tv_alt, compressive_tv_alt2],
-            ["l1",
-             # "l1h",
-             "tc2", "tva", "tva2"]
-    ):
-        estimates[proc_method_name] = processing_method(
-            measurement, model.mt_op, model.img_shape,
-            alpha=alpha_values[(proc_method_name, img_id, float(noise_var))]
+    cs_processing_methods = [GICompressiveSensingL1DCT,
+                             # GICompressiveSensingL1Haar,
+                             GICompressiveTC2,
+                             GICompressiveAnisotropicTotalVariation,
+                             GICompressiveAnisotropicTotalVariation2]
+
+    for processing_method in cs_processing_methods:
+        estimates[processing_method.name] = processing_method(model)(
+            measurement,
+            alpha=alpha_values[(processing_method.name, img_id, float(noise_var))]
         )
 
     tau_values = {(2, 0.0): 1.0, (2, 0.1): 1,
@@ -455,20 +326,17 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
     estimate_red_sparse = sparse_reduction(measurement, model.mt_op, model.img_shape,
                                            tau_values[(img_id, noise_var)], basis="eig")
 
-    cs_part_names = ["l1",
-                  # "l1h",
-                  "tc2", "tva", "tva2"]
     if save:
         if src_img is not None:
             save_image_for_show(src_img, figure_name_format(img_id, noise_var, "src",
                                                             "", pattern_type=pattern_type))
         save_image_for_show(traditional_gi, figure_name_format(img_id, noise_var, "gi",
                                                         "", pattern_type=pattern_type))
-        for cs_part_name in cs_part_names:
+        for cs_method in cs_processing_methods:
             save_image_for_show(
-                estimates[cs_part_name], figure_name_format(
-                    img_id, noise_var, cs_part_name,
-                    alpha=alpha_values[(cs_part_name, img_id, float(noise_var))],
+                estimates[cs_method.name], figure_name_format(
+                    img_id, noise_var, estimates[cs_method.name],
+                    alpha=alpha_values[(estimates[cs_method.name], img_id, float(noise_var))],
                     pattern_type=pattern_type
                 )
             )
@@ -500,12 +368,9 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
         if src_img is not None:
             plot_part(src_img, "Объект исследования")
         plot_part(traditional_gi, "Обычное ФИ")
-        for name, desc in zip(cs_part_names,
-                              ["нормы L1 в базисе DCT",
-                               # "нормы L1 в базисе преобразования Хаара",
-                               "полной кривизны",
-                               "анизотропного вар-та вариации",
-                               "альт. анизотропного вар-та вариации"]):
+        for cs_method in cs_processing_methods:
+            name = cs_method.name
+            desc = cs_method.desc
             plot_part(estimates[name],
                       "Сжатые измерения, минимизация " + desc)
         plot_part(estimate_red_dense,
@@ -603,13 +468,10 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
                               total=len(n_patterns_values)):
         measurement = total_measurement[: n_patterns]
         mt_op = model.mt_op_part(n_patterns)
-        illum_patterns = model.illumination_patterns(n_patterns)
         se_results[i, 0] = n_patterns
 
         # Traditional ghost imaging
-        traditional_gi = np.tensordot(measurement - measurement.mean(),
-                                      illum_patterns - illum_patterns.mean(axis=0),
-                                      axes=1)/measurement.size
+        traditional_gi = TraditionalGI(model)(measurement)
         se_results[i, 1] = np.linalg.norm(traditional_gi - src_img)**2
 
         # L1 compressive sensing
@@ -617,11 +479,11 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
         # current_results.append(np.linalg.norm(cs_l1 - src_img)**2)
 
         # anisotropic TV compressive sensing
-        cs_tva = compressive_tv_alt(measurement, mt_op, src_img.shape, alpha=1e-5)
+        cs_tva = GICompressiveAnisotropicTotalVariation(model)(measurement, alpha=1e-5)
         se_results[i, 2] = np.linalg.norm(cs_tva - src_img)**2
 
         # anisotropic TV compressive sensing, second version
-        cs_tva2 = compressive_tv_alt2(measurement, mt_op, src_img.shape, alpha=1e-5)
+        cs_tva2 = GICompressiveAnisotropicTotalVariation2(model)(measurement, alpha=1e-5)
         se_results[i, 3] = np.linalg.norm(cs_tva2 - src_img)**2
 
         # measurement reduction
