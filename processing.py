@@ -18,17 +18,15 @@ from cvxpy.atoms.affine.diff import diff as cp_diff
 from cvxpy.atoms.affine.reshape import reshape as cp_reshape
 from cvxpy.atoms.affine.sum import sum as cp_sum
 from cvxpy.atoms.norm1 import norm1 as cp_norm1
-from imageio import imread
 from scipy.fft import dctn, idctn  # pylint: disable=E0611
 from scipy.optimize import LinearConstraint, minimize
 from scipy.sparse.linalg import lsmr
-from scipy.stats.qmc import Sobol
 from tqdm import tqdm
 
-from fiber_propagation import propagator
 from haar_transform import haar_transform, inverse_haar_transform_2d
 from misc import load_demo_image, save_image_for_show
 from reduction import dense_reduction, dense_reduction_iter, sparse_reduction
+from measurement_model import GIMeasurementModel, pad_or_trim_to_shape
 
 logger = logging.getLogger("Fiber-GI-reduction")
 logger.propagate = False # Do not propagate to the root logger
@@ -221,114 +219,23 @@ def figure_name_format(img_id, noise_var=0., kind="", alpha=None,
     return name
 
 
-def build_pseudorandom_patterns(n_patterns: int, shape):
-    rng = np.random.default_rng(2021)
-    propagate_func = propagator(shape[0])
-    illum_patterns = rng.integers(0, 1, size=(n_patterns,) + shape,
-                                      endpoint=True)
-    for i in range(n_patterns):
-        illum_patterns[i, ...] = propagate_func(illum_patterns[i, ...])
-    return illum_patterns
-
-
-def build_quasirandom_patterns(n_patterns: int, shape):
-    propagate_func = propagator(shape[0])
-
-    gen = Sobol(shape[0]*shape[1], scramble=False, seed=2021).fast_forward(2)
-    illum_patterns = (gen.random(n_patterns) >= 0.5).reshape((n_patterns,) + shape).astype(float)
-
-    for i in range(n_patterns):
-        illum_patterns[i, ...] = propagate_func(illum_patterns[i, ...])
-    return illum_patterns
-
-
-def load_speckle_patterns(n_patterns: int):
-    illum_patterns = []
-    logger.debug("Loading speckle patterns")
-    try:
-        for pattern_no in range(n_patterns):
-            illum_patterns.append(imread("speckle_patterns/slm{}.bmp".format(pattern_no), as_gray=True))
-    except FileNotFoundError:
-        raise ValueError("Not enough speckle pattern data for {} patterns.".format(n_patterns))
-    illum_patterns = np.array(illum_patterns)
-    return illum_patterns
-
-
 def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 1024, pattern_type: str="pseudorandom"):
-    if pattern_type == "speckle":
-        img_shape = None
-    else:
-        img_shape = (128, 128)
-
     if not isinstance(data_source, int):
         measurement = data_source
         n_patterns = measurement.size
-
-    mt_op, size, img_shape = build_measurement_model(n_patterns, img_shape, pattern_type)
-
-    if isinstance(data_source, int):
-        src_img = load_demo_image(data_source)
-        if img_shape[0] != src_img.shape[0]:
-            diff = (img_shape[0] - src_img.shape[0])//2
-            src_img = load_demo_image(data_source, pad_by=diff)
-
-        measurement = mt_op.dot(src_img.ravel())
-
-        if noise_var > 0:
-            rng = np.random.default_rng(2021)
-            measurement += rng.normal(scale=noise_var**0.5, size=measurement.shape)
-        return mt_op, measurement, src_img, size
-    else:
-        return mt_op, measurement, img_shape, size
-
-
-def build_measurement_model(n_patterns: int, image_shape=None,
-                            pattern_type: str = "pseudorandom"):
-    """
-    Construct the measurement model describing the formation
-    of the acquired data.
-
-    Parameters
-    ----------
-    n_patterns : int
-        The number of illumination patterns, corresponding to measurement size.
-    image_shape : 2-tuple of int or None
-        The shape of the illumination patterns.
-        Can be omitted if using acquired phoots of illumination patterns.
-    pattern_type : str, optional
-        What illumination patterns to use. Valid values are "pseudorandom",
-        "quasirandom" (corresponding to binary pseudo- or quasirandom patterns
-        which then pass through the optical fiber) and "speckle" (corresponding
-        to acquired photos of illumination patterns).
-        The default is "pseudorandom".
-
-    Returns
-    -------
-    mt_op : (n_patterns, image_shape[0]*image_shape[1]) ndarray
-        The linear operator modeling the measurement process.
-    size : float
-        Half-size of the produced image (e.g. in metric units).
-    image_shape : 2-tuple of int
-        The shape of the illumination patterns.
-        If it was provided as an argument, the same value is returned.
-    """
     if pattern_type == "speckle":
-        illum_patterns = load_speckle_patterns(n_patterns)
-        size = 5.2 * illum_patterns.shape[1]/2 # μm
+        img_shape = None
+        pixel_size = 5.2
     else:
-        if image_shape is None:
-            raise ValueError(
-                "Must provide the image shape unless using speckle patterns."
-            )
-        size = 2.5 * 50. / 4 # μm
-        if pattern_type == "pseudorandom":
-            illum_patterns = build_pseudorandom_patterns(n_patterns, image_shape)
-        elif pattern_type == "quasirandom":
-            illum_patterns = build_quasirandom_patterns(n_patterns, image_shape)
-    mt_op = illum_patterns.reshape((n_patterns, -1))
-    if image_shape is None:
-        image_shape = illum_patterns.shape[1:]
-    return mt_op, size, image_shape
+        img_shape = (128, 128)
+        pixel_size = (2.5 * 50. / 4)/img_shape[0]
+
+    model = GIMeasurementModel(n_patterns, img_shape, pattern_type, pixel_size=pixel_size)
+
+    if isinstance(data_source, int): # pylint: disable=R1705
+        src_img = load_demo_image(data_source)
+        measurement = model.simulate_measurement(src_img, noise_var)
+    return measurement, model
 
 
 def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") -> None:
@@ -354,25 +261,16 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
                          "tva": compressive_tv_alt, "l1h": compressive_l1_haar,
                          "tva2": compressive_tv_alt2}
 
-    mt_op, measurement, src_img, _ = prepare_measurements(
+    measurement, model = prepare_measurements(
         img_id, noise_var=noise_var
     )
 
-    try:
-        img_shape = src_img.shape
-    except AttributeError:
-        img_shape = src_img
-        src_img = None
+    if not isinstance(img_id, int):
+        img_id = None
 
-    # estimate = processing_method[proc_kind](measurement, mt_op, img_shape,
-    #                                         alpha=None)
-    # save_image_for_show(
-    #     estimate, figure_name_format(img_id, noise_var, proc_kind, alpha=None),
-    #     rescale=True
-    # )
     for alpha in [1e-9, 1e-6, 1e-3, 1e-1, 1, 1e1]:
-        estimate = processing_method[proc_kind](measurement, mt_op,
-                                                img_shape, alpha=alpha)
+        estimate = processing_method[proc_kind](measurement, model.mt_op,
+                                                model.img_shape, alpha=alpha)
         save_image_for_show(
             estimate, figure_name_format(img_id, noise_var, proc_kind,
                                          alpha=alpha),
@@ -410,15 +308,12 @@ def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0,
                          "tva": compressive_tv_alt, "l1h": compressive_l1_haar,
                          "tva2": compressive_tv_alt2}[proc_kind]
 
-    mt_op, measurement, src_img, _ = prepare_measurements(
+    measurement, model = prepare_measurements(
         img_id, noise_var=noise_var
     )
 
-    try:
-        img_shape = src_img.shape
-    except AttributeError:
-        img_shape = src_img
-        src_img = None
+    if not isinstance(img_id, int):
+        img_id = None
 
     residuals = []
     reg_terms = []
@@ -426,7 +321,7 @@ def finding_alpha_l_curve(img_id: int = 3, noise_var: float = 0,
     #TODO Try a parallel execution of the loop body
     # Though it will likely fail due to lack of memory
     for alpha in tqdm(alpha_values):
-        _, resid, reg = processing_method(measurement, mt_op, img_shape,
+        _, resid, reg = processing_method(measurement, model.mt_op, model.img_shape,
                                           alpha=alpha, full=True)
         residuals.append(resid)
         reg_terms.append(reg)
@@ -463,6 +358,8 @@ def plot_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1",
     None
 
     """
+    if not isinstance(img_id, int):
+        img_id = None
     with np.load("../l_curve/{}_{:.0e}_{}_{}.npz".format(
             img_id, noise_var, proc_kind, n_measurements
     )) as data:
@@ -478,22 +375,18 @@ def plot_l_curve(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1",
 
 
 def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
-    mt_op, measurement, src_img, _ = prepare_measurements(
+    measurement, model = prepare_measurements(
         img_id, noise_var=noise_var
     )
-
-    try:
-        img_shape = src_img.shape
-    except AttributeError:
-        img_shape = src_img
-        src_img = None
+    if not isinstance(img_id, int):
+        img_id = None
 
     for relax in [1.]:
         if relax == 1.:
             pp = []
         else:
             pp = False
-        estimate = dense_reduction_iter(measurement, mt_op, img_shape,
+        estimate = dense_reduction_iter(measurement, model.mt_op, model.img_shape,
                                         relax=relax, n_iter=1000000, print_progress=pp)
         save_image_for_show(estimate, figure_name_format(
             img_id, noise_var, "red-iter", alpha=relax
@@ -506,20 +399,20 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
 
 
 def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show: bool=True, pattern_type: str="pseudorandom") -> None:
-    mt_op, measurement, src_img, size = prepare_measurements(
+    measurement, model = prepare_measurements(
         img_id, noise_var=noise_var,
         n_patterns=n_patterns,
         pattern_type=pattern_type
     )
 
-    try:
-        img_shape = src_img.shape
-    except AttributeError:
-        img_shape = src_img
-        src_img = None
+    if isinstance(img_id, int):
+        src_img = pad_or_trim_to_shape(load_demo_image(img_id), model.img_shape)
+    else:
+        #TODO Think of a better identifier
         img_id = None
+        src_img = None
 
-    illum_patterns = mt_op.reshape((-1,) + img_shape)
+    illum_patterns = model.illumination_patterns()
     traditional_gi = np.tensordot(measurement - measurement.mean(),
                                   illum_patterns - illum_patterns.mean(axis=0),
                                   axes=1)/measurement.size
@@ -547,7 +440,7 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
              "tc2", "tva", "tva2"]
     ):
         estimates[proc_method_name] = processing_method(
-            measurement, mt_op, img_shape,
+            measurement, model.mt_op, model.img_shape,
             alpha=alpha_values[(proc_method_name, img_id, float(noise_var))]
         )
 
@@ -558,8 +451,8 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
                   (8, 0.): 1e-05, (8, 0.1): 1e-5}
     tau_values = defaultdict(lambda: 1., tau_values)
 
-    estimate_red_dense = dense_reduction(measurement, mt_op, img_shape)
-    estimate_red_sparse = sparse_reduction(measurement, mt_op, img_shape,
+    estimate_red_dense = dense_reduction(measurement, model.mt_op, model.img_shape)
+    estimate_red_sparse = sparse_reduction(measurement, model.mt_op, model.img_shape,
                                            tau_values[(img_id, noise_var)], basis="eig")
 
     cs_part_names = ["l1",
@@ -588,12 +481,14 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
 
     if show:
         subplot_no = 0
+        size = model.pixel_size * model.img_shape[0]/2
 
         def plot_part(image, part_title):
             nonlocal subplot_no
             subplot_no += 1
             plt.subplot(3, 3, subplot_no)
-            plt.imshow(image, cmap=plt.cm.gray, extent=[-size, size, -size, size]) #pylint: disable=E1101
+            plt.imshow(image, cmap=plt.cm.gray, #pylint: disable=E1101
+                       extent=[-size, size, -size, size])
             plt.xlabel("x, мкм")
             plt.ylabel("y, мкм")
             plt.title(part_title)
@@ -630,16 +525,13 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
 
 
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:
-    mt_op, measurement, src_img, _ = prepare_measurements(
+    measurement, model = prepare_measurements(
         img_id, noise_var=noise_var, n_patterns=n_measurements,
         pattern_type=pattern_type
     )
 
-    try:
-        img_shape = src_img.shape
-    except AttributeError:
-        img_shape = src_img
-        src_img = None
+    # if isinstance(img_id, int):
+    #     src_img = pad_or_trim_to_shape(load_demo_image(img_id), model.img_shape)
 
     # "dct", no noise: 1e-5
     # "dct", 1e-2 noise: at least 1
@@ -661,7 +553,7 @@ def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type
     # result = compressive_tv_alt(measurement, mt_op, img_shape, alpha=1e-6)
     # # print(np.linalg.norm(result - src_img)**2)
 
-    result = sparse_reduction(measurement, mt_op, img_shape,
+    result = sparse_reduction(measurement, model.mt_op, model.img_shape,
                                thresholding_coeff=0.1, basis="eig")
     # print(np.linalg.norm(result - src_img)**2)
 
@@ -676,10 +568,11 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
     output = "../data/se_{}_{}_{:.0e}_{:.0e}.dat".format(img_id, pattern_type[0], noise_var, tau_value)
     intermediate_results = "../data/_se_{}_{}_{:.0e}_{:.0e}.dat".format(img_id, pattern_type[0], noise_var, tau_value)
     max_n_patterns = 13000
-    total_mt_op, total_measurement, src_img, _ = prepare_measurements(
+    total_measurement, model = prepare_measurements(
         img_id, noise_var=noise_var, n_patterns=max_n_patterns,
         pattern_type=pattern_type
     )
+    src_img = pad_or_trim_to_shape(load_demo_image(img_id), model.img_shape)
 
     se_results = []
     header = ["n", "gi",
@@ -709,8 +602,8 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
     for i, n_patterns in tqdm(enumerate(n_patterns_values, start_ind),
                               total=len(n_patterns_values)):
         measurement = total_measurement[: n_patterns]
-        mt_op = total_mt_op[: n_patterns, ...]
-        illum_patterns = mt_op.reshape((-1,) + src_img.shape)
+        mt_op = model.mt_op_part(n_patterns)
+        illum_patterns = model.illumination_patterns(n_patterns)
         se_results[i, 0] = n_patterns
 
         # Traditional ghost imaging
