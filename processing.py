@@ -378,7 +378,7 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
                                          alpha=alpha),
             rescale=True
         )
-    logger.INFO("Done for imd_id = {}, noise_var = {} and proc_kind = {}".format(
+    logger.info("Done for imd_id = {}, noise_var = {} and proc_kind = {}".format(
         img_id, noise_var, proc_kind
     ))
 
@@ -500,9 +500,8 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
         ), rescale=True)
         if pp:
             plt.plot(pp)
-    logger.info("Done for imd_id = {}, noise_var = {} and proc_kind = red-iter".format(
-        img_id, noise_var
-    ))
+    logger.info("Done for imd_id = %s, noise_var = %.3g and proc_kind = red-iter",
+                img_id, noise_var)
     plt.show()
 
 
