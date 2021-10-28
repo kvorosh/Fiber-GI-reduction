@@ -240,3 +240,30 @@ class GICompressiveAnisotropicTotalVariation(GICompressiveSensing):
         sparsity_term = (cp_norm1(cp_diff(estimate, k=1, axis=0))
                          + cp_norm1(cp_diff(estimate, k=1, axis=1)))**2
         return sparsity_term
+
+
+class GICompressiveAnisotropicTotalVariation2(GICompressiveSensing):
+    """
+    Compressive sensing for the case when the regularization term
+    is the L2 norm version of anisotropic total variation.
+
+    Parameters
+    ----------
+    model : GIMeasurementModel
+        The ghost image measurement model on which to base the processing.
+
+    Class attributes
+    ----------------
+    name : str
+        Short name, typically used to refer to method's results when saving
+        it to a file.
+    desc : str
+        Description of a method to use for plotting.
+    """
+    name = "tva2"
+    desc = "Сжатые измерения, мин. альт. анизотропного вар-та вариации"
+
+    def _regularization_term(self, estimate):
+        estimate = cp_reshape(estimate, self._measurement_model.img_shape)
+        sparsity_term = cp.atoms.total_variation.tv(estimate)**2
+        return sparsity_term
