@@ -287,7 +287,9 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
         img_id = None
         src_img = None
 
-    traditional_gi = TraditionalGI(model)(measurement)
+    estimates = {}
+
+    estimates[TraditionalGI.name] = TraditionalGI(model)(measurement)
 
     # whitened_measurement = noise_var**0.5 * measurement
 
@@ -301,7 +303,6 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
     # especially for no noise,
     # but this provides the same results faster.
 
-    estimates = {}
 
     cs_processing_methods = [GICompressiveSensingL1DCT,
                              # GICompressiveSensingL1Haar,
@@ -322,8 +323,10 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
                   (8, 0.): 1e-05, (8, 0.1): 1e-5}
     tau_values = defaultdict(lambda: 1., tau_values)
 
-    estimate_red_dense = GIDenseReduction(model)(measurement)
-    estimate_red_sparse = GISparseReduction(model)(
+    processing_methods = [TraditionalGI] + cs_processing_methods + [GIDenseReduction, GISparseReduction]
+
+    estimates[GIDenseReduction.name] = GIDenseReduction(model)(measurement)
+    estimates[GISparseReduction.name] = GISparseReduction(model)(
         measurement, tau_values[(img_id, noise_var)], basis="eig"
     )
 
@@ -331,8 +334,9 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
         if src_img is not None:
             save_image_for_show(src_img, figure_name_format(img_id, noise_var, "src",
                                                             "", pattern_type=pattern_type))
-        save_image_for_show(traditional_gi, figure_name_format(img_id, noise_var, "gi",
-                                                        "", pattern_type=pattern_type))
+        save_image_for_show(estimates[TraditionalGI.name],
+                            figure_name_format(img_id, noise_var, TraditionalGI.name,
+                                               "", pattern_type=pattern_type))
         for cs_method in cs_processing_methods:
             save_image_for_show(
                 estimates[cs_method.name], figure_name_format(
@@ -341,10 +345,10 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
                     pattern_type=pattern_type
                 )
             )
-        save_image_for_show(estimate_red_dense, figure_name_format(img_id, noise_var, "red",
+        save_image_for_show(estimates[GIDenseReduction.name], figure_name_format(img_id, noise_var, GIDenseReduction.name,
                                                         "", pattern_type=pattern_type))
-        save_image_for_show(estimate_red_sparse, figure_name_format(
-            img_id, noise_var, "reds",
+        save_image_for_show(estimates[GISparseReduction.name], figure_name_format(
+            img_id, noise_var, GISparseReduction.name,
             tau_values[(img_id, float(noise_var))], pattern_type=pattern_type
         ))
 
@@ -368,16 +372,10 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
 
         if src_img is not None:
             plot_part(src_img, "Объект исследования")
-        plot_part(traditional_gi, "Обычное ФИ")
-        for cs_method in cs_processing_methods:
-            name = cs_method.name
-            desc = cs_method.desc
-            plot_part(estimates[name],
-                      "Сжатые измерения, минимизация " + desc)
-        plot_part(estimate_red_dense,
-                  "Редукция измерений без дополнительной информации об объекте")
-        plot_part(estimate_red_sparse,
-                  "Редукция измерений при дополнительной информации об объекте")
+        for method in processing_methods:
+            name = method.name
+            desc = method.desc
+            plot_part(estimates[name], desc)
     # mng = plt.get_current_fig_manager()
     # try:
     #     mng.frame.Maximize(True)
