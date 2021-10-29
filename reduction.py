@@ -13,54 +13,147 @@ from cvxpy.atoms.affine.diff import diff as cp_diff
 from cvxpy.atoms.affine.reshape import reshape as cp_reshape
 from cvxpy.atoms.norm1 import norm1 as cp_norm1
 from scipy.fftpack import dct, idct
-from scipy.sparse.linalg import lsmr
 from tqdm import trange
 
 from haar_transform import (haar_transform, haar_transform_2d,
                             inverse_haar_transform_2d)
+from measurement_model import GIProcessingMethod
+
 
 logger = logging.getLogger("Fiber-GI-reduction.reduction")
 
 
-def dense_reduction(measurement, mt_op, img_shape, calc_cov_op=False, eig=False):
-    if calc_cov_op:
-        logger.info("Covariance operator calculation started.")
+class GIDenseReduction(GIProcessingMethod):
+    """
+    Measurement reduction method without additional information about the object.
+
+    Parameters
+    ----------
+    model : GIMeasurementModel
+        The ghost image measurement model on which to base the processing.
+
+    Class attributes
+    ----------------
+    name : str
+        Short name, typically used to refer to method's results when saving
+        it to a file.
+    desc : str
+        Description of a method to use for plotting.
+    """
+    name = "red"
+    desc = "Редукция измерений без дополнительной информации об объекте"
+
+    def __call__(self, measurement, calc_cov_op: bool=False, eig: bool=False, # pylint: disable=W0221
+                 **kwargs) -> np.ndarray:
+        """
+        Estimate the image using measurement reduction method without
+        additional information.
+
+        Parameters
+        ----------
+        measurement : array_like
+            The measurement. If the measurement size is less than
+            the available number of patterns, only the first
+            `measurement.size` ones are used.
+        calc_cov_op : bool, optional
+            Whether to calculate the estimate covariance operator.
+            The default is False.
+        eig : bool, optional
+            Whether to calculate the measurement model eigenbasis.
+            If True, the value of calc_cov_op is ignored.
+            The default is False.
+
+        Returns
+        -------
+        numpy.ndarray
+            The estimated image.
+
+        """
         t_start = perf_counter()
+        mt_op = self._mt_op(measurement.size)
         #TODO Change to iterative methods depending on which is faster
         u, s, vh = np.linalg.svd(mt_op, False, True, False)
+        #TODO Change to the approach used in e.g. np.linalg.lstsq for rcond=None
         mask = abs(s) > abs(s).max() * 1e-15
         s2 = np.zeros_like(s)
         s2[mask] = 1/s[mask]
-        red_res = ((vh.T * s2) @ u.T @ measurement).reshape(img_shape)
+        red_res = ((vh.T * s2) @ u.T @ measurement).reshape(
+            self._measurement_model.img_shape
+        )
         t_end = perf_counter()
-        logger.info("Cov. op. calculation took {:.3g} s".format(t_end - t_start))
-        if eig:
+        logger.info("Dense measurement reduction took %.3g s",
+                    t_end - t_start)
+        if eig: # pylint: disable=R1705
             return red_res, s2, vh
+        elif calc_cov_op:
+            return red_res, (vh.T * s2**2) @ vh
         else:
-            cov_op = (vh.T * s2**2) @ vh
-            return red_res, cov_op
-    else:
-        red_res = lsmr(mt_op, measurement)[0].reshape(img_shape)
-        return red_res
+            return red_res
 
 
-def dense_reduction_iter(measurement, mt_op, img_shape, n_iter=None, relax=0.15,
-                         print_progress=False):
-    red_res = np.zeros(mt_op.shape[1])
-    if n_iter is None:
-        n_iter = measurement.size
+class GIDenseReductionIter(GIProcessingMethod):
+    """
+    Measurement reduction method without additional information about the object
+    using Kaczmarz's iterative method.
 
-    for i in trange(n_iter):
-        ind = i % mt_op.shape[0]
-        row = mt_op[ind, :]
-        correction_scal = (measurement[ind] - row.dot(red_res))/(row.dot(row))
-        red_res += row * relax * correction_scal
-        # red_res = red_res.clip(0, None)
-        # if print_progress:
-            # print(i, correction_scal*row.dot(row))
-        if isinstance(print_progress, list):
-            print_progress.append(correction_scal*row.dot(row))
-    return red_res.reshape(img_shape)
+    Parameters
+    ----------
+    model : GIMeasurementModel
+        The ghost image measurement model on which to base the processing.
+
+    Class attributes
+    ----------------
+    name : str
+        Short name, typically used to refer to method's results when saving
+        it to a file.
+    desc : str
+        Description of a method to use for plotting.
+    """
+    name = "rediter"
+    desc = "Редукция измерений без дополнительной информации об объекте"
+
+    def __call__(self, measurement, n_iter=None, relax=0.15, # pylint: disable=W0221
+                         print_progress=False,
+                 **kwargs) -> np.ndarray:
+        """
+        Estimate the image using measurement reduction method without
+        additional information using Kaczmarz's iterative method.
+
+        Parameters
+        ----------
+        measurement : array_like
+            The measurement. If the measurement size is less than
+            the available number of patterns, only the first
+            `measurement.size` ones are used.
+        calc_cov_op : bool, optional
+            Whether to calculate the estimate covariance operator.
+            The default is False.
+        eig : bool, optional
+            Whether to calculate the measurement model eigenbasis.
+            If True, the value of calc_cov_op is ignored.
+            The default is False.
+
+        Returns
+        -------
+        numpy.ndarray
+            The estimated image.
+
+        """
+        mt_op = self._mt_op(measurement.size)
+        red_res = np.zeros(mt_op.shape[1])
+        if n_iter is None:
+            n_iter = measurement.size
+        for i in trange(n_iter):
+            ind = i % mt_op.shape[0]
+            row = mt_op[ind, :]
+            correction_scal = (measurement[ind] - row.dot(red_res))/(row.dot(row))
+            red_res += row * relax * correction_scal
+            # red_res = red_res.clip(0, None)
+            # if print_progress:
+                # print(i, correction_scal*row.dot(row))
+            if isinstance(print_progress, list):
+                print_progress.append(correction_scal*row.dot(row))
+        return red_res.reshape(self._measurement_model.img_shape)
 
 
 def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind="hard",
@@ -145,43 +238,82 @@ def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind
     return thresholded_data
 
 
+class GISparseReduction(GIDenseReduction):
+    """
+    Measurement reduction method using the information about sparsity
+    of the feature of interest of the studied object in a given basis.
 
-def sparse_reduction(measurement, mt_op, img_shape, thresholding_coeff=1.,
-                     basis="eig"):
-    t_start = perf_counter()
-    if basis == "eig":
-        red_res, sing_val, sing_vec = dense_reduction(
-            measurement, mt_op, img_shape, calc_cov_op=True, eig=True
-        )
-        if thresholding_coeff == 0:
-            return red_res
-        logger.info("Dense reduction done")
-        res = do_thresholding(red_res, basis=basis,
-                              thresholding_coeff=thresholding_coeff,
-                              sing_val=sing_val, sing_vec=sing_vec)
-    else:
-        red_res, cov_op = dense_reduction(measurement, mt_op, img_shape,
-                                                  calc_cov_op=True)
-        logger.info("Dense reduction done")
-        res = do_thresholding(red_res, cov_op, basis=basis,
-                              thresholding_coeff=thresholding_coeff)
+    Parameters
+    ----------
+    model : GIMeasurementModel
+        The ghost image measurement model on which to base the processing.
 
-    #TODO Omit the following if sufficient measurement data to estimate the image
-    expected_measurement = mt_op.dot(res.ravel())
-    f = cp.Variable(mt_op.shape[1])
-    f2 = cp_reshape(f, img_shape)
-    sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
-                      + cp_norm1(cp_diff(f2, k=1, axis=1)))**2
-    # sparsity_term = cp.atoms.total_variation.tv(f2)**2
-    objective = cp.Minimize(sparsity_term)
-    constraints = [mt_op @ f == expected_measurement]
-    prob = cp.Problem(objective, constraints)
-    try:
-        prob.solve(solver=cp.SCS)
-    except cp.error.SolverError:
-        prob.solve(solver=cp.ECOS)
-    t_end = perf_counter()
-    logger.info("Sparse reduction took {:.3g} s for A shape {}".format(
-        t_end - t_start, mt_op.shape
-    ))
-    return f.value.reshape(img_shape)
+    Class attributes
+    ----------------
+    name : str
+        Short name, typically used to refer to method's results when saving
+        it to a file.
+    desc : str
+        Description of a method to use for plotting.
+    """
+    name = "reds"
+    desc = "Редукция измерений при дополнительной информации об объекте"
+
+    def __call__(self, measurement, thresholding_coeff: float=1.,
+                 basis: str="eig", **kwargs) -> np.ndarray:
+        """
+        Estimate the image using measurement reduction method using
+        the information about sparsity of the feature of interest
+        of the studied object in a given basis.
+
+        Parameters
+        ----------
+        measurement : array_like
+            The measurement. If the measurement size is less than
+            the available number of patterns, only the first
+            `measurement.size` ones are used.
+        thresholding_coeff : float, optional
+            The thresholding coefficient used for hypothesis testing.
+            The default is 1. 0 corresponds to no thresholding.
+        basis : {"eig", "dct", "haar"}, optional
+            The basis of sparse representation. The default is "eig",
+            corresponding to eigenbasis of the measurement model.
+
+        Returns
+        -------
+        numpy.ndarray
+            The estimated image.
+
+        """
+        t_start = perf_counter()
+        if basis == "eig":
+            red_res, sing_val, sing_vec = super().__call__(measurement, eig=True)
+            if thresholding_coeff > 0:
+                red_res = do_thresholding(red_res, basis=basis,
+                                          thresholding_coeff=thresholding_coeff,
+                                        sing_val=sing_val, sing_vec=sing_vec)
+        else:
+            red_res, cov_op = super().__call__(measurement, calc_cov_op=True)
+            if thresholding_coeff > 0:
+                red_res = do_thresholding(red_res, cov_op, basis=basis,
+                                          thresholding_coeff=thresholding_coeff)
+
+        #TODO Omit the following if sufficient measurement data to estimate the image
+        mt_op = self._mt_op(measurement.size)
+        expected_measurement = mt_op.dot(red_res.ravel())
+        f = cp.Variable(mt_op.shape[1])
+        f2 = cp_reshape(f, self._measurement_model.img_shape)
+        sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
+                          + cp_norm1(cp_diff(f2, k=1, axis=1)))**2
+        # sparsity_term = cp.atoms.total_variation.tv(f2)**2
+        objective = cp.Minimize(sparsity_term)
+        constraints = [mt_op @ f == expected_measurement]
+        prob = cp.Problem(objective, constraints)
+        try:
+            prob.solve(solver=cp.SCS)
+        except cp.error.SolverError:
+            prob.solve(solver=cp.ECOS)
+        t_end = perf_counter()
+        logger.info("Sparse reduction took %.3g s for A shape %s",
+                    t_end - t_start, mt_op.shape)
+        return f.value.reshape(self._measurement_model.img_shape)

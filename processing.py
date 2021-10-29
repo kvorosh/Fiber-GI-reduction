@@ -17,7 +17,7 @@ from scipy.sparse.linalg import lsmr
 from tqdm import tqdm
 
 from misc import load_demo_image, save_image_for_show
-from reduction import dense_reduction, dense_reduction_iter, sparse_reduction
+from reduction import GIDenseReduction, GISparseReduction, GIDenseReductionIter
 from measurement_model import GIMeasurementModel, pad_or_trim_to_shape, TraditionalGI
 from compressive_sensing import (GICompressiveSensingL1DCT,
                                  GICompressiveSensingL1Haar, GICompressiveTC2,
@@ -261,8 +261,8 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
             pp = []
         else:
             pp = False
-        estimate = dense_reduction_iter(measurement, model.mt_op, model.img_shape,
-                                        relax=relax, n_iter=1000000, print_progress=pp)
+        estimate = GIDenseReductionIter(model)(measurement, relax=relax,
+                                               n_iter=1000000, print_progress=pp)
         save_image_for_show(estimate, figure_name_format(
             img_id, noise_var, "red-iter", alpha=relax
         ), rescale=True)
@@ -322,9 +322,10 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
                   (8, 0.): 1e-05, (8, 0.1): 1e-5}
     tau_values = defaultdict(lambda: 1., tau_values)
 
-    estimate_red_dense = dense_reduction(measurement, model.mt_op, model.img_shape)
-    estimate_red_sparse = sparse_reduction(measurement, model.mt_op, model.img_shape,
-                                           tau_values[(img_id, noise_var)], basis="eig")
+    estimate_red_dense = GIDenseReduction(model)(measurement)
+    estimate_red_sparse = GISparseReduction(model)(
+        measurement, tau_values[(img_id, noise_var)], basis="eig"
+    )
 
     if save:
         if src_img is not None:
@@ -418,8 +419,8 @@ def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type
     # result = compressive_tv_alt(measurement, mt_op, img_shape, alpha=1e-6)
     # # print(np.linalg.norm(result - src_img)**2)
 
-    result = sparse_reduction(measurement, model.mt_op, model.img_shape,
-                               thresholding_coeff=0.1, basis="eig")
+    result = GISparseReduction(model)(measurement, thresholding_coeff=0.1,
+                                      basis="eig")
     # print(np.linalg.norm(result - src_img)**2)
 
     plt.imshow(result, cmap=plt.cm.gray) # pylint: disable=E1101
@@ -467,7 +468,6 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
     for i, n_patterns in tqdm(enumerate(n_patterns_values, start_ind),
                               total=len(n_patterns_values)):
         measurement = total_measurement[: n_patterns]
-        mt_op = model.mt_op_part(n_patterns)
         se_results[i, 0] = n_patterns
 
         # Traditional ghost imaging
@@ -487,8 +487,7 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
         se_results[i, 3] = np.linalg.norm(cs_tva2 - src_img)**2
 
         # measurement reduction
-        reds = sparse_reduction(measurement, mt_op, src_img.shape,
-                                thresholding_coeff=tau_value)
+        reds = GISparseReduction(model)(measurement, thresholding_coeff=tau_value)
         se_results[i, 4] = np.linalg.norm(reds - src_img)**2
 
         np.savetxt(intermediate_results, se_results[: i + 1, ...],
