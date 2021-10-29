@@ -695,7 +695,7 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
         n_patterns_values = [1, 2, 4, 8, 16, 32, 64, 128, 256, 288, 320, 352, 368,
                              384, 400, 416, 448, 480, 512, 1024, 2048, 4096, 8192,
                              max_n_patterns]
-    se_results = np.empty((len(n_patterns_values), len(header)))
+    se_results = np.zeros((len(n_patterns_values), len(header)))
     header = '\t'.join(header)
     try:
         prev_results = np.loadtxt(intermediate_results)
