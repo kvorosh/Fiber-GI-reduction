@@ -274,11 +274,14 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
 
 
 def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show: bool=True, pattern_type: str="pseudorandom") -> None:
+    t_start = perf_counter()
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var,
         n_patterns=n_patterns,
         pattern_type=pattern_type
     )
+
+    logger.info("Setting up took %.3g s", perf_counter() - t_start)
 
     if isinstance(img_id, int):
         src_img = pad_or_trim_to_shape(load_demo_image(img_id), model.img_shape)
@@ -289,7 +292,10 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
 
     estimates = {}
 
+    t_estim_part = perf_counter()
     estimates[TraditionalGI.name] = TraditionalGI(model)(measurement)
+    logger.info("Traditional GI formation took %.3g s.",
+                perf_counter() - t_estim_part)
 
     # whitened_measurement = noise_var**0.5 * measurement
 
@@ -311,10 +317,13 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
                              GICompressiveAnisotropicTotalVariation2]
 
     for processing_method in cs_processing_methods:
+        t_estim_start = perf_counter()
         estimates[processing_method.name] = processing_method(model)(
             measurement,
             alpha=alpha_values[(processing_method.name, img_id, float(noise_var))]
         )
+        logger.info("Estimation using %s took %.3g s.", processing_method.name,
+                    perf_counter() - t_estim_start)
 
     tau_values = {(2, 0.0): 1.0, (2, 0.1): 1,
                   (3, 0.): 1e-05, (3, 0.1): 0.1,
@@ -329,6 +338,9 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
     estimates[GISparseReduction.name] = GISparseReduction(model)(
         measurement, tau_values[(img_id, noise_var)], basis="eig"
     )
+    t_end = perf_counter()
+    logger.info("show_methods for %d patterns and %s shape took %.3g s",
+                measurement.size, src_img.shape, t_end - t_start)
 
     if save:
         if src_img is not None:
