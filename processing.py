@@ -426,7 +426,7 @@ def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type
     #     with open("red_sparse_diff.txt", "a", encoding="utf-8") as f:
     #         f.write("{}\t{:.1g}\t{}\t{:.1g}\t{:.3g}\n".format(img_id, noise_var, basis, thr_coeff, diff_sq))
 
-    # result = compressive_tv_alt(measurement, mt_op, img_shape, alpha=1e-6)
+    # result = GICompressiveAnisotropicTotalVariation2(model)(measurement, alpha=1e-5)
     # # print(np.linalg.norm(result - src_img)**2)
 
     result = GISparseReduction(model)(measurement, thresholding_coeff=0.1,
