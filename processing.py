@@ -79,9 +79,9 @@ def compressive_tv(measurement, mt_op, img_shape, alpha=None):
     return res.x.reshape(img_shape)
 
 
-def figure_name_format(img_id, noise_var=0., kind="", alpha=None,
+def figure_name_format(img_id, n_patterns, noise_var=0., kind="", alpha=None,
                        other_params=None, pattern_type="pseudorandom"):
-    name = "{}_{}_{:.0e}_{}".format(img_id, pattern_type[0], noise_var, kind)
+    name = f"{img_id}_{pattern_type[0]}_{n_patterns}_{noise_var:.0e}_{kind}"
     if alpha is not None:
         if alpha != "":
             try:
@@ -344,25 +344,25 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
 
     if save:
         if src_img is not None:
-            save_image_for_show(src_img, figure_name_format(img_id, noise_var, "src",
-                                                            "", pattern_type=pattern_type))
+            save_image_for_show(src_img, figure_name_format(img_id, n_patterns, noise_var, "src",
+                                                            "", pattern_type=pattern_type), unit_scale=True)
         save_image_for_show(estimates[TraditionalGI.name],
-                            figure_name_format(img_id, noise_var, TraditionalGI.name,
-                                               "", pattern_type=pattern_type))
+                            figure_name_format(img_id, n_patterns, noise_var, TraditionalGI.name,
+                                               "", pattern_type=pattern_type), rescale=True)
         for cs_method in cs_processing_methods:
             save_image_for_show(
                 estimates[cs_method.name], figure_name_format(
-                    img_id, noise_var, estimates[cs_method.name],
-                    alpha=alpha_values[(estimates[cs_method.name], img_id, float(noise_var))],
+                    img_id, n_patterns, noise_var, cs_method.name,
+                    alpha=alpha_values[(cs_method.name, img_id, float(noise_var))],
                     pattern_type=pattern_type
-                )
+                ), rescale=True
             )
-        save_image_for_show(estimates[GIDenseReduction.name], figure_name_format(img_id, noise_var, GIDenseReduction.name,
-                                                        "", pattern_type=pattern_type))
+        save_image_for_show(estimates[GIDenseReduction.name], figure_name_format(img_id, n_patterns, noise_var, GIDenseReduction.name,
+                                                        "", pattern_type=pattern_type), rescale=True)
         save_image_for_show(estimates[GISparseReduction.name], figure_name_format(
-            img_id, noise_var, GISparseReduction.name,
+            img_id, n_patterns, noise_var, GISparseReduction.name,
             tau_values[(img_id, float(noise_var))], pattern_type=pattern_type
-        ))
+        ), rescale=True)
 
     if show:
         subplot_no = 0
