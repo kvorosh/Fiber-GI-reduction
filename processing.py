@@ -284,7 +284,7 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
     logger.info("Setting up took %.3g s", perf_counter() - t_start)
 
     if isinstance(img_id, int):
-        src_img = pad_or_trim_to_shape(load_demo_image(img_id), model.img_shape)
+        src_img = pad_or_trim_to_shape(load_demo_image(img_id), model.img_shape).astype(float)
     else:
         #TODO Think of a better identifier
         img_id = None
