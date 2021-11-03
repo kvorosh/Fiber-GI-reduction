@@ -261,7 +261,7 @@ class GISparseReduction(GIDenseReduction):
     desc = "Редукция измерений при дополнительной информации об объекте"
 
     def __call__(self, measurement, thresholding_coeff: float=1.,
-                 basis: str="eig", **kwargs) -> np.ndarray:
+                 basis: str="eig", skip_tv: bool=False, **kwargs) -> np.ndarray:
         """
         Estimate the image using measurement reduction method using
         the information about sparsity of the feature of interest
@@ -279,6 +279,10 @@ class GISparseReduction(GIDenseReduction):
         basis : {"eig", "dct", "haar"}, optional
             The basis of sparse representation. The default is "eig",
             corresponding to eigenbasis of the measurement model.
+        skip_tv : bool, optional
+            If True, skip the optimization of image total variation
+            for estimating the null space component of the image.
+            The default is False (do not skip).
 
         Returns
         -------
@@ -299,6 +303,8 @@ class GISparseReduction(GIDenseReduction):
                 red_res = do_thresholding(red_res, cov_op, basis=basis,
                                           thresholding_coeff=thresholding_coeff)
 
+        if skip_tv:
+            return red_res
         #TODO Omit the following if sufficient measurement data to estimate the image
         mt_op = self._mt_op(measurement.size)
         expected_measurement = mt_op.dot(red_res.ravel())

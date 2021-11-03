@@ -403,7 +403,8 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var, n_patterns=n_measurements,
-        pattern_type=pattern_type
+        pattern_type=pattern_type,
+        img_shape=(200, 200)
     )
 
     # if isinstance(img_id, int):
@@ -429,11 +430,29 @@ def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type
     # result = GICompressiveAnisotropicTotalVariation2(model)(measurement, alpha=1e-5)
     # # print(np.linalg.norm(result - src_img)**2)
 
-    result = GISparseReduction(model)(measurement, thresholding_coeff=0.1,
-                                      basis="eig")
+    # result = GISparseReduction(model)(measurement, thresholding_coeff=0.1,
+    #                                    basis="eig")
     # print(np.linalg.norm(result - src_img)**2)
 
+    estimator = GIDenseReductionIter(model)
+    result = estimator(measurement, n_iter=100000)
+
+    estimator_bis = GISparseReduction(model)
+    result_bis = estimator_bis(measurement, 1e6, skip_tv=False)
+    # result_bis = estimator_bis(measurement, 5e6, skip_tv=False)
+    # result_bis = estimator_bis(measurement, 1e8, skip_tv=True)
+
+    result2 = TraditionalGI(model)(measurement)
+
+    plt.subplot(131)
     plt.imshow(result, cmap=plt.cm.gray) # pylint: disable=E1101
+    plt.title("Линейная редукция измерения")
+    plt.subplot(132)
+    plt.imshow(result_bis, cmap=plt.cm.gray) # pylint: disable=E1101
+    plt.title("Редукция измерения, предлагаемый метод")
+    plt.subplot(133)
+    plt.imshow(result2, cmap=plt.cm.gray) # pylint: disable=E1101
+    plt.title("Обычное ФИ")
 
     plt.show()
 
@@ -515,13 +534,12 @@ def se_calculations(img_id: int=3, noise_var: float=0.1, tau_value: float=0.1,
 if __name__ == "__main__":
     # show_single_method(3, 0)
     # show_single_method(3, 1e-1)
-    se_calculations(7, 1e-1, 1., pattern_type="quasirandom")
-    se_calculations(7, 1e-1, 10., pattern_type="quasirandom")
     # show_single_method(3, 1e-1, 1024)
     # show_single_method(6, 0)
     # show_single_method(6, 1e-1)
     # show_single_method(7, 0)
     # show_single_method(7, 1e-1)
+    show_single_method(np.load("bucket_data.npy")[: 500].astype(float), 1e-1, pattern_type="speckle")
     # show_methods(8, 1e-1, n_patterns=512, save=True, show=True, pattern_type="speckle")
     # show_methods(3)
     # show_methods(3, 1e-1)
