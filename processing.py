@@ -93,12 +93,12 @@ def figure_name_format(img_id, n_patterns, noise_var=0., kind="", alpha=None,
     return name
 
 
-def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 1024, pattern_type: str="pseudorandom"):
+def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 1024,
+                         pattern_type: str="pseudorandom", img_shape=None):
     if not isinstance(data_source, int):
         measurement = data_source
         n_patterns = measurement.size
     if pattern_type == "speckle":
-        img_shape = None
         pixel_size = 5.2
     else:
         img_shape = (128, 128)

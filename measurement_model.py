@@ -10,6 +10,8 @@ from cached_property import cached_property
 import numpy as np
 from imageio import imread
 from scipy.stats.qmc import Sobol
+from skimage.transform import resize
+from tqdm import trange
 
 from fiber_propagation import propagator
 
@@ -26,8 +28,8 @@ class GIMeasurementModel:
         The number of illumination patterns, corresponding to measurement size.
     img_shape : 2-tuple of ints or None, optional
         The shape of the ghost image. Can be omitted if the illumination patterns
-        are loaded from files instead of calculations and it is ignored
-        in that case.
+        are loaded from files instead of calculations. In that case if it is not None,
+        the loaded patterns are resized to the given size.
     pattern_type : {"pseudorandom", "quasirandom", "speckle"}, optional
         What illumination patterns to use. Valid values are "pseudorandom",
         "quasirandom" (corresponding to binary pseudo- or quasirandom patterns
@@ -63,7 +65,7 @@ class GIMeasurementModel:
         self.pixel_size = pixel_size
         self.unit = unit
         if pattern_type == "speckle":
-            illum_patterns = self._load_speckle_patterns()
+            illum_patterns = self._load_speckle_patterns(img_shape)
             self.img_shape = illum_patterns.shape[1:]
         else:
             if img_shape is None:
@@ -139,13 +141,17 @@ class GIMeasurementModel:
             illum_patterns[i, ...] = propagate_func(illum_patterns[i, ...])
         return illum_patterns
 
-    def _load_speckle_patterns(self):
+    def _load_speckle_patterns(self, img_shape):
         illum_patterns = []
         try:
-            for pattern_no in range(self.n_patterns):
-                illum_patterns.append(imread(
-                    "speckle_patterns/slm{}.bmp".format(pattern_no), as_gray=True
-                ))
+            for pattern_no in trange(self.n_patterns):
+                raw_pattern = imread(f"speckle_patterns/slm{pattern_no}.bmp",
+                                     as_gray=True)
+                if img_shape is None:
+                    illum_patterns.append(raw_pattern)
+                else:
+                    illum_patterns.append(resize(raw_pattern, img_shape,
+                                                 anti_aliasing=False))
         except FileNotFoundError as e: # pylint: disable=C0103
             raise ValueError(
                 "Not enough speckle pattern data for {} patterns.".format(self.n_patterns)
