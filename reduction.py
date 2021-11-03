@@ -18,6 +18,7 @@ from tqdm import trange
 from haar_transform import (haar_transform, haar_transform_2d,
                             inverse_haar_transform_2d)
 from measurement_model import GIProcessingMethod
+from misc import try_solving_until_success
 
 
 logger = logging.getLogger("Fiber-GI-reduction.reduction")
@@ -309,10 +310,8 @@ class GISparseReduction(GIDenseReduction):
         objective = cp.Minimize(sparsity_term)
         constraints = [mt_op @ f == expected_measurement]
         prob = cp.Problem(objective, constraints)
-        try:
-            prob.solve(solver=cp.SCS)
-        except cp.error.SolverError:
-            prob.solve(solver=cp.ECOS)
+        #TODO Is there an easier way of trying all available solvers until one succeeds?
+        try_solving_until_success(prob, [cp.OSQP, cp.ECOS, cp.SCS])
         t_end = perf_counter()
         logger.info("Sparse reduction took %.3g s for A shape %s",
                     t_end - t_start, mt_op.shape)

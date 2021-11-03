@@ -4,7 +4,9 @@
 """
 
 from functools import partial
+from typing import Sequence
 
+import cvxpy as cp
 import matplotlib.pyplot as plt
 import numpy as np
 from imageio import imread, imwrite
@@ -117,3 +119,42 @@ def save_vectors(fname, vectors, names, with_ind=True, num_fmt="%.18e"):
     header = "\t".join(names)
     np.savetxt("../data/" + fname + ".dat", results, delimiter='\t',
                header=header, fmt=fmt)
+
+
+def try_solving_until_success(problem: cp.problems.problem.Problem,
+                              solvers: Sequence[str], **kwargs):
+    """
+    Try using different solvers on the optimization problem until one succeeds.
+    The first used one is the default one, followed by those listed in `solvers`
+    in that order. The default solver is not included twice.
+
+    Parameters
+    ----------
+    problem : cvxpy.problems.problem.Problem
+        The optimization problem.
+    solvers : sequence of str
+        The solvers.
+    **kwargs
+        Arguments to be passed to problem.solve()
+
+    Returns
+    -------
+    None.
+
+    """
+    try:
+        problem.solve(**kwargs)
+    except cp.error.SolverError as e:
+        try:
+            solvers.remove(problem.solver_stats.solver_name)
+        except ValueError:
+            pass
+        except AttributeError:
+            solvers = [s for s in solvers if s not in str(e)]
+        for solver in solvers:
+            try:
+                problem.solve(solver=solver, **kwargs)
+            except cp.error.SolverError:
+                pass
+            else:
+                break

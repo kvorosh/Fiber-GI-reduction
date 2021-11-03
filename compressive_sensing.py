@@ -19,6 +19,7 @@ from scipy.fft import dctn, idctn  # pylint: disable=E0611
 
 from measurement_model import GIProcessingMethod
 from haar_transform import haar_transform, inverse_haar_transform_2d
+from misc import try_solving_until_success
 
 logger = logging.getLogger("Fiber-GI-reduction.cs")
 
@@ -90,7 +91,7 @@ class GICompressiveSensing(GIProcessingMethod):
             fidelity = cp_sum((measurement - mt_op @ estimate)**2)
             objective = cp.Minimize(fidelity + alpha*sparsity)
             prob = cp.Problem(objective)
-            prob.solve()
+            try_solving_until_success(prob, [cp.OSQP, cp.ECOS, cp.SCS])
             fidelity = fidelity.value
             sparsity = sparsity.value
         result = self._postprocess(estimate.value)
