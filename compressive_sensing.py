@@ -81,7 +81,7 @@ class GICompressiveSensing(GIProcessingMethod):
         sparsity = self._regularization_term(estimate, **kwargs)
         if alpha is None:
             constraints = [mt_op @ estimate == measurement]
-            objective = cp.Minimize(estimate)
+            objective = cp.Minimize(sparsity)
             prob_constr = cp.Problem(objective, constraints)
             prob_constr.solve()
         else:
