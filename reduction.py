@@ -6,6 +6,7 @@ Created on Sat Jul 31 00:03:07 2021
 import logging
 from functools import partial
 from time import perf_counter
+from typing import Optional
 
 import cvxpy as cp
 import numpy as np
@@ -114,8 +115,8 @@ class GIDenseReductionIter(GIProcessingMethod):
     name = "rediter"
     desc = "Редукция измерений без дополнительной информации об объекте"
 
-    def __call__(self, measurement, n_iter=None, relax=0.15, # pylint: disable=W0221
-                         print_progress=False,
+    def __call__(self, measurement, n_iter: Optional[int]=None, relax=0.15, # pylint: disable=W0221
+                 start_from=None, print_progress=False, nonzero=False,
                  **kwargs) -> np.ndarray:
         """
         Estimate the image using measurement reduction method without
@@ -127,13 +128,15 @@ class GIDenseReductionIter(GIProcessingMethod):
             The measurement. If the measurement size is less than
             the available number of patterns, only the first
             `measurement.size` ones are used.
-        calc_cov_op : bool, optional
-            Whether to calculate the estimate covariance operator.
-            The default is False.
-        eig : bool, optional
-            Whether to calculate the measurement model eigenbasis.
-            If True, the value of calc_cov_op is ignored.
-            The default is False.
+        n_iter : int or None, optional
+            The number of iterations. If omitted, the number of iterations
+            is measurement size.
+        relax : float, optional
+            The step size. Has to be below 2. The default is 0.15.
+            Higher values improve convergence speed,
+            but may result in overshooting or numerical instability.
+        start_from : array_like or None, optional
+            The initial approximation. If None, zero vector is used.
 
         Returns
         -------
@@ -142,7 +145,10 @@ class GIDenseReductionIter(GIProcessingMethod):
 
         """
         mt_op = self._mt_op(measurement.size)
-        red_res = np.zeros(mt_op.shape[1])
+        if start_from is None:
+            red_res = np.zeros(mt_op.shape[1])
+        else:
+            red_res = np.copy(start_from).ravel()
         if n_iter is None:
             n_iter = measurement.size
         for i in trange(n_iter):
@@ -150,7 +156,8 @@ class GIDenseReductionIter(GIProcessingMethod):
             row = mt_op[ind, :]
             correction_scal = (measurement[ind] - row.dot(red_res))/(row.dot(row))
             red_res += row * relax * correction_scal
-            # red_res = red_res.clip(0, None)
+            if nonzero:
+                red_res = red_res.clip(0, None)
             # if print_progress:
                 # print(i, correction_scal*row.dot(row))
             if isinstance(print_progress, list):
