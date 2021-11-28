@@ -74,8 +74,9 @@ class GIDenseReduction(GIProcessingMethod):
         mt_op = self._mt_op(measurement.size)
         #TODO Change to iterative methods depending on which is faster
         u, s, vh = np.linalg.svd(mt_op, False, True, False)
-        #TODO Change to the approach used in e.g. np.linalg.lstsq for rcond=None
-        mask = abs(s) > abs(s).max() * 1e-15
+        rcond = np.finfo(s.dtype).eps * max(u.shape[0], vh.shape[1])
+        tol = np.amax(s) * rcond
+        mask = abs(s) > tol
         s2 = np.zeros_like(s)
         s2[mask] = 1/s[mask]
         red_res = ((vh.T * s2) @ u.T @ measurement).reshape(
