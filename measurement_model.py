@@ -4,17 +4,21 @@ Construction of the measurement model describing the formation
 of the acquired data.
 """
 
+import logging
+from pathlib import Path
+from time import perf_counter
 from typing import Optional, Tuple
 
 from cached_property import cached_property
 import numpy as np
 from imageio import imread
 from scipy.stats.qmc import Sobol
-from skimage.transform import resize
-from tqdm import trange
+from skimage.transform import downscale_local_mean
+from tqdm import tqdm
 
 from fiber_propagation import propagator
 
+logger = logging.getLogger("Fiber-GI-reduction.measmodel")
 
 #TODO Add an attribute to store noise variance information?
 class GIMeasurementModel:
@@ -29,7 +33,8 @@ class GIMeasurementModel:
     img_shape : 2-tuple of ints or None, optional
         The shape of the ghost image. Can be omitted if the illumination patterns
         are loaded from files instead of calculations. In that case if it is not None,
-        the loaded patterns are resized to the given size.
+        the loaded patterns are resized to approximately given size
+        ('approximately' because since skimage.transform.downscale_local_mean is used).
     pattern_type : {"pseudorandom", "quasirandom", "speckle"}, optional
         What illumination patterns to use. Valid values are "pseudorandom",
         "quasirandom" (corresponding to binary pseudo- or quasirandom patterns
@@ -64,8 +69,8 @@ class GIMeasurementModel:
         self.n_patterns = n_patterns
         self.pixel_size = pixel_size
         self.unit = unit
-        if pattern_type == "speckle":
-            illum_patterns = self._load_speckle_patterns(img_shape)
+        if "*" in pattern_type:
+            illum_patterns = self._load_speckle_patterns(img_shape, pattern_type)
             self.img_shape = illum_patterns.shape[1:]
         else:
             if img_shape is None:
@@ -141,22 +146,34 @@ class GIMeasurementModel:
             illum_patterns[i, ...] = propagate_func(illum_patterns[i, ...])
         return illum_patterns
 
-    def _load_speckle_patterns(self, img_shape):
-        illum_patterns = []
-        try:
-            for pattern_no in trange(self.n_patterns):
-                raw_pattern = imread(f"speckle_patterns/slm{pattern_no}.bmp",
-                                     as_gray=True)
-                if img_shape is None:
-                    illum_patterns.append(raw_pattern)
-                else:
-                    illum_patterns.append(resize(raw_pattern, img_shape,
-                                                 anti_aliasing=False))
-        except FileNotFoundError as e: # pylint: disable=C0103
-            raise ValueError(
-                "Not enough speckle pattern data for {} patterns.".format(self.n_patterns)
-            ) from e
-        illum_patterns = np.array(illum_patterns)
+    def _load_speckle_patterns(self, img_shape, pattern_template):
+        logger.info("Loading %d illumination patterns from %s",
+                    self.n_patterns, pattern_template)
+        t_start = perf_counter()
+        ref_dir = Path(".")
+        pattern_list = [p for p in ref_dir.glob(pattern_template) if p.is_file()][: self.n_patterns]
+        for pattern_no, pattern_path in enumerate(tqdm(pattern_list)):
+            raw_pattern = imread(pattern_path, as_gray=True)
+            if raw_pattern.shape[0] == 430 and raw_pattern.shape[1] == 430:
+                crop_to = [0, 400, 0, 400]
+                raw_pattern = raw_pattern[crop_to[2]: crop_to[3], crop_to[0]: crop_to[1]]
+            if img_shape is not None:
+                #TODO Make it so the produced size is *not larger* than the specified
+                #TODO Calculate the factors only once
+                old_shape = np.array(raw_pattern.shape)
+                img_shape = np.array(img_shape)
+                factors = tuple(np.rint(old_shape/img_shape).astype(int))
+                if pattern_no == 0:
+                    logger.info("Original size is %s", old_shape)
+                    logger.info("Trying to reduce size to %s", img_shape)
+                    logger.info("Binning factors are %s", factors)
+                raw_pattern = downscale_local_mean(raw_pattern, factors)
+            if pattern_no == 0:
+                logger.info("Pattern shape is %s", raw_pattern.shape)
+                illum_patterns = np.empty((self.n_patterns,) + raw_pattern.shape, dtype=float)
+            illum_patterns[pattern_no, ...] = raw_pattern
+        t_end = perf_counter()
+        logger.info("Loading illumination patterns took %.3g s.", t_end - t_start)
         return illum_patterns
 
     @cached_property
