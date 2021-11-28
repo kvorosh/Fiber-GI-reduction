@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from fiber_propagation import propagator
 
-logger = logging.getLogger("Fiber-GI-reduction.measmodel")
+logger = logging.getLogger("FGI-red.measmodel")
 
 #TODO Add an attribute to store noise variance information?
 class GIMeasurementModel:

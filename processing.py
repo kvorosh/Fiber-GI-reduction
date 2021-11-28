@@ -24,7 +24,7 @@ from compressive_sensing import (GICompressiveSensingL1DCT,
                                  GICompressiveAnisotropicTotalVariation,
                                  GICompressiveAnisotropicTotalVariation2)
 
-logger = logging.getLogger("Fiber-GI-reduction")
+logger = logging.getLogger("FGI-red")
 logger.propagate = False # Do not propagate to the root logger
 logger.setLevel(logging.INFO)
 logger.handlers = []

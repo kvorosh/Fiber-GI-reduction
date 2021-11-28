@@ -21,7 +21,7 @@ from measurement_model import GIProcessingMethod
 from haar_transform import haar_transform, inverse_haar_transform_2d
 from misc import try_solving_until_success
 
-logger = logging.getLogger("Fiber-GI-reduction.cs")
+logger = logging.getLogger("FGI-red.cs")
 
 
 class GICompressiveSensing(GIProcessingMethod):

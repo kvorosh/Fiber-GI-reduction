@@ -22,7 +22,7 @@ from measurement_model import GIProcessingMethod
 from misc import try_solving_until_success
 
 
-logger = logging.getLogger("Fiber-GI-reduction.reduction")
+logger = logging.getLogger("FGI-red.reduction")
 
 
 class GIDenseReduction(GIProcessingMethod):
