@@ -374,8 +374,8 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
             plt.subplot(3, 3, subplot_no)
             plt.imshow(image, cmap=plt.cm.gray, #pylint: disable=E1101
                        extent=[-size, size, -size, size])
-            plt.xlabel("x, мкм")
-            plt.ylabel("y, мкм")
+            plt.xlabel("x, " + model.unit)
+            plt.ylabel("y, " + model.unit)
             plt.title(part_title)
 
         fig = plt.gcf()
