@@ -287,7 +287,7 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
         src_img = pad_or_trim_to_shape(load_demo_image(img_id), model.img_shape).astype(float)
     else:
         #TODO Think of a better identifier
-        img_id = None
+        img_id = pattern_type.split('/')[1]
         src_img = None
 
     estimates = {}
