@@ -166,7 +166,7 @@ class GIDenseReductionIter(GIProcessingMethod):
 
 
 def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind="hard",
-                    sing_val=None, sing_vec=None):
+                    sing_val=None, sing_vec=None, full: bool=False):
     """
     Apply thresholding to data based on its variance.
 
@@ -194,11 +194,15 @@ def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind
     sing_vec : array_like or None
         Singular vectors of the measuring system.
         Used only if basis == "eig".
+    full : bool
+        Whether to return the ratios used for thresholding. The default is False.
 
     Returns
     -------
     thresholded_data : ndarray
         Data after thresholding.
+    ratios : ndarray
+        The ratios used for thresholding. Returned only if full = True.
     """
     t_transform_start = perf_counter()
     if basis == "haar":
@@ -231,6 +235,9 @@ def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind
 
     threshold = np.sqrt(variances)*thresholding_coeff
     mask = abs(data_in_basis) < threshold
+    ratios = abs(data_in_basis)/np.sqrt(variances)
+    ratios = ratios[np.isfinite(ratios)]
+    logger.info(f"Thresholded out {mask.sum()} components out of {mask.size}, leaving {mask.size - mask.sum()} components")
 
     thresholded_data_in_basis = data_in_basis.copy()
     thresholded_data_in_basis[mask] = 0
@@ -244,7 +251,10 @@ def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind
     thresholded_data = inverse_transform_2d(thresholded_data_in_basis)
     t_transform_end = perf_counter()
     logger.info("{}-related stuff took {:.3g} s".format(basis, t_transform_end - t_transform_start))
-    return thresholded_data
+    if full:
+        return thresholded_data, ratios
+    else:
+        return thresholded_data
 
 
 class GISparseReduction(GIDenseReduction):
@@ -269,7 +279,8 @@ class GISparseReduction(GIDenseReduction):
     desc = "Редукция измерений при дополнительной информации об объекте"
 
     def __call__(self, measurement, thresholding_coeff: float=1.,
-                 basis: str="eig", skip_tv: bool=False, **kwargs) -> np.ndarray:
+                 basis: str="eig", skip_tv: bool=False, full: bool=False,
+                 **kwargs) -> np.ndarray:
         """
         Estimate the image using measurement reduction method using
         the information about sparsity of the feature of interest
@@ -291,6 +302,9 @@ class GISparseReduction(GIDenseReduction):
             If True, skip the optimization of image total variation
             for estimating the null space component of the image.
             The default is False (do not skip).
+        full : bool
+            Whether to return the ratios used for thresholding.
+            The default is False.
 
         Returns
         -------
@@ -304,15 +318,19 @@ class GISparseReduction(GIDenseReduction):
             if thresholding_coeff > 0:
                 red_res = do_thresholding(red_res, basis=basis,
                                           thresholding_coeff=thresholding_coeff,
-                                        sing_val=sing_val, sing_vec=sing_vec)
+                                          sing_val=sing_val, sing_vec=sing_vec,
+                                          full=full)
         else:
             red_res, cov_op = super().__call__(measurement, calc_cov_op=True)
             if thresholding_coeff > 0:
                 red_res = do_thresholding(red_res, cov_op, basis=basis,
-                                          thresholding_coeff=thresholding_coeff)
+                                          thresholding_coeff=thresholding_coeff,
+                                          full=full)
 
         if skip_tv:
             return red_res
+        if full:
+            red_res, remainder = red_res
         #TODO Omit the following if sufficient measurement data to estimate the image
         mt_op = self._mt_op(measurement.size)
         expected_measurement = mt_op.dot(red_res.ravel())
@@ -329,4 +347,15 @@ class GISparseReduction(GIDenseReduction):
         t_end = perf_counter()
         logger.info("Sparse reduction took %.3g s for A shape %s",
                     t_end - t_start, mt_op.shape)
-        return f.value.reshape(self._measurement_model.img_shape)
+        try:
+            result = f.value.reshape(self._measurement_model.img_shape)
+        except AttributeError:
+            print("Problem status", prob.status)
+            print("Solver name", prob.solver_stats.solver_name)
+            print("Problem value", prob.value)
+            logger.error("Constrained optimization during measurement reduction did not produce a valid estimate.")
+            result = red_res
+        if full:
+            return result, remainder
+        else:
+            return result
