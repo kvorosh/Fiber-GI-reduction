@@ -237,6 +237,9 @@ def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind
     mask = abs(data_in_basis) < threshold
     ratios = abs(data_in_basis)/np.sqrt(variances)
     ratios = ratios[np.isfinite(ratios)]
+    logger.info("Notable values for choosing the thresholding coefficient")
+    logger.info("min = %.1g\tmean = %.1g\tmax = %.1g\tmedian = %.1g",
+                ratios.min(), ratios.mean(), ratios.max(), np.median(ratios))
     logger.info(f"Thresholded out {mask.sum()} components out of {mask.size}, leaving {mask.size - mask.sum()} components")
 
     thresholded_data_in_basis = data_in_basis.copy()
