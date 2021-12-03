@@ -82,7 +82,7 @@ class GIMeasurementModel:
                 illum_patterns = self._pseudorandom_patterns()
             elif pattern_type == "quasirandom":
                 illum_patterns = self._quasirandom_patterns()
-        self.mt_op = illum_patterns.reshape((self.n_patterns, -1)).astype(float)
+        self.mt_op = illum_patterns.reshape((self.n_patterns, -1))
 
     def mt_op_part(self, n_patterns: Optional[int]=None) -> np.ndarray:
         """
