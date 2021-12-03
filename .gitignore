@@ -130,3 +130,9 @@ dmypy.json
 
 # pylint files
 .pylint.d/
+
+# Speckle patterns
+speckle_patterns/
+
+# Bucket detector data
+bucket_data/
