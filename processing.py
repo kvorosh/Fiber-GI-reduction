@@ -98,8 +98,9 @@ def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 
     if not isinstance(data_source, int):
         measurement = data_source
         n_patterns = measurement.size
-    if pattern_type == "speckle":
-        pixel_size = 5.2
+    if '*' in pattern_type:
+        # pixel_size = 5.2 # μm
+        pixel_size = 1. # pixel
     else:
         img_shape = (128, 128)
         pixel_size = (2.5 * 50. / 4)/img_shape[0]
