@@ -276,10 +276,16 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
 
 def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show: bool=True, pattern_type: str="pseudorandom") -> None:
     t_start = perf_counter()
+    if '*' in pattern_type:
+        # img_shape = (105, 105)
+        img_shape = (200, 200)
+    else:
+        img_shape = None
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var,
         n_patterns=n_patterns,
-        pattern_type=pattern_type
+        pattern_type=pattern_type,
+        img_shape=img_shape
     )
 
     logger.info("Setting up took %.3g s", perf_counter() - t_start)
