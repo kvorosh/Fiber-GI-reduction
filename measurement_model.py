@@ -204,6 +204,7 @@ class GIMeasurementModel:
         measurement = self.mt_op.dot(source_image.ravel())
 
         if noise_var > 0:
+            measurement = measurement.astype(float)
             measurement += self._noise_rng.normal(
                 scale=noise_var**0.5, size=measurement.shape
             )
