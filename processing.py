@@ -19,6 +19,7 @@ from tqdm import tqdm
 from misc import load_demo_image, save_image_for_show
 from reduction import GIDenseReduction, GISparseReduction, GIDenseReductionIter
 from measurement_model import GIMeasurementModel, pad_or_trim_to_shape, TraditionalGI
+from fiber_propagation import PRESET_0, PRESET_1
 from compressive_sensing import (GICompressiveSensingL1DCT,
                                  GICompressiveSensingL1Haar, GICompressiveTC2,
                                  GICompressiveAnisotropicTotalVariation,
@@ -80,8 +81,8 @@ def compressive_tv(measurement, mt_op, img_shape, alpha=None):
 
 
 def figure_name_format(img_id, n_patterns, noise_var=0., kind="", alpha=None,
-                       other_params=None, pattern_type="pseudorandom"):
-    name = f"{img_id}_{pattern_type[0]}_{n_patterns}_{noise_var:.0e}_{kind}"
+                       other_params=None, pattern_type="p"):
+    name = f"{img_id}_{pattern_type}_{n_patterns}_{noise_var:.0e}_{kind}"
     if alpha is not None:
         if alpha != "":
             try:
@@ -94,7 +95,7 @@ def figure_name_format(img_id, n_patterns, noise_var=0., kind="", alpha=None,
 
 
 def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 1024,
-                         pattern_type: str="pseudorandom", img_shape=None):
+                         pattern_type: str="pseudorandom", img_shape=None, fiber_opts=PRESET_0):
     if not isinstance(data_source, int):
         measurement = data_source
         n_patterns = measurement.size
@@ -105,7 +106,7 @@ def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 
         img_shape = (128, 128)
         pixel_size = (2.5 * 50. / 4)/img_shape[0]
 
-    model = GIMeasurementModel(n_patterns, img_shape, pattern_type, pixel_size=pixel_size)
+    model = GIMeasurementModel(n_patterns, img_shape, pattern_type, pixel_size=pixel_size, fiber_opts=fiber_opts)
 
     if isinstance(data_source, int): # pylint: disable=R1705
         src_img = load_demo_image(data_source)
@@ -274,7 +275,9 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
     plt.show()
 
 
-def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show: bool=True, pattern_type: str="pseudorandom") -> None:
+def show_methods(img_id=3, noise_var=0., n_patterns=1024,
+                 save: bool=True, show: bool=True,
+                 pattern_type: str="pseudorandom", fiber_opts=PRESET_0) -> None:
     t_start = perf_counter()
     if '*' in pattern_type:
         # img_shape = (105, 105)
@@ -285,7 +288,8 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
         img_id, noise_var=noise_var,
         n_patterns=n_patterns,
         pattern_type=pattern_type,
-        img_shape=img_shape
+        img_shape=img_shape,
+        fiber_opts=fiber_opts
     )
 
     logger.info("Setting up took %.3g s", perf_counter() - t_start)
@@ -352,23 +356,23 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024, save: bool=True, show:
     if save:
         if src_img is not None:
             save_image_for_show(src_img, figure_name_format(img_id, n_patterns, noise_var, "src",
-                                                            "", pattern_type=pattern_type), unit_scale=True)
+                                                            "", pattern_type=pattern_type[0] + str(fiber_opts['id'])), unit_scale=True)
         save_image_for_show(estimates[TraditionalGI.name],
                             figure_name_format(img_id, n_patterns, noise_var, TraditionalGI.name,
-                                               "", pattern_type=pattern_type), rescale=True)
+                                               "", pattern_type=pattern_type[0] + str(fiber_opts['id'])), rescale=True)
         for cs_method in cs_processing_methods:
             save_image_for_show(
                 estimates[cs_method.name], figure_name_format(
                     img_id, n_patterns, noise_var, cs_method.name,
                     alpha=alpha_values[(cs_method.name, img_id, float(noise_var))],
-                    pattern_type=pattern_type
+                    pattern_type=pattern_type[0] + str(fiber_opts['id'])
                 ), rescale=True
             )
         save_image_for_show(estimates[GIDenseReduction.name], figure_name_format(img_id, n_patterns, noise_var, GIDenseReduction.name,
-                                                        "", pattern_type=pattern_type), rescale=True)
+                                                        "", pattern_type=pattern_type[0] + str(fiber_opts['id'])), rescale=True)
         save_image_for_show(estimates[GISparseReduction.name], figure_name_format(
             img_id, n_patterns, noise_var, GISparseReduction.name,
-            tau_values[(img_id, float(noise_var))], pattern_type=pattern_type
+            tau_values[(img_id, float(noise_var))], pattern_type=pattern_type[0] + str(fiber_opts['id'])
         ), rescale=True)
 
     if show:
@@ -556,6 +560,8 @@ if __name__ == "__main__":
     # show_methods(6, 1e-1)
     # show_methods(7)
     # show_methods(7, 1e-1)
+    show_methods(3, 1e-1, n_patterns=1024, save=True, show=False,
+                 pattern_type="pseudorandom", fiber_opts=PRESET_1)
     # finding_alpha(3, 0., "l1")
     # finding_alpha(3, 0., "l1h")
     # finding_alpha(3, 0., "tc2")

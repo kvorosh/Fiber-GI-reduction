@@ -47,6 +47,9 @@ class GIMeasurementModel:
         Image pixel size in e.g. metric units.
     unit : str or None, optional
         The unit of pixel_size.
+    fiber_opts : dict or None, optional
+        Dictionary of properties of the optical fiber. For examples, see
+        PRESET_0 and PRESET_1 in fiber_propagation.py
 
     Attributes
     ----------
@@ -65,10 +68,12 @@ class GIMeasurementModel:
 
     def __init__(self, n_patterns: int, img_shape: Optional[Tuple[int, int]]=None, # pylint: disable=R0913
                  pattern_type: str="pseudorandom", pixel_size: float=1.,
-                 unit: str="px"):
+                 unit: str="px", fiber_opts=None):
         self.n_patterns = n_patterns
         self.pixel_size = pixel_size
         self.unit = unit
+        self._fiber_opts = fiber_opts
+        logger.info("Using optical fiber options %s", self._fiber_opts)
         if "*" in pattern_type:
             illum_patterns = self._load_speckle_patterns(img_shape, pattern_type)
             self.img_shape = illum_patterns.shape[1:]
@@ -125,7 +130,7 @@ class GIMeasurementModel:
         rng = np.random.default_rng(2021)
         #TODO Allow for non-square images
         #TODO pass self.img_shape and self.pixel_size to pyMMF calculations
-        propagate_func = propagator(self.img_shape[0])
+        propagate_func = propagator(self.img_shape[0], self._fiber_opts)
         illum_patterns = rng.integers(0, 1, size=(self.n_patterns,) + self.img_shape,
                                           endpoint=True)
         for i in range(self.n_patterns):
@@ -133,7 +138,7 @@ class GIMeasurementModel:
         return illum_patterns
 
     def _quasirandom_patterns(self):
-        propagate_func = propagator(self.img_shape[0])
+        propagate_func = propagator(self.img_shape[0], self._fiber_opts)
 
         gen = Sobol(
             self.img_shape[0]*self.img_shape[1], scramble=False, seed=2021
