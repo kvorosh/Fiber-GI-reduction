@@ -6,47 +6,58 @@ Code related to calculating the result of propagation in an optical fiber.
 import numpy as np
 import matplotlib.pyplot as plt
 import pyMMF
+from joblib import Memory
 from misc import load_demo_image
 
+memory = Memory("./cachedir", verbose=1)
 
-def propagator(grid_dim=64):
-    diam = 50. # μm
+ # μm for length units
+PRESET_0 = dict(areaSize=2.5*50./2, n1=1.45, NA=0.22, a=50./2, id=0)
+PRESET_1 = dict(areaSize=3.5*31.25, n1=1.4613, NA=0.275, a=31.25, id=1)
+
+
+class _Propagator():
+    def __init__(self, eigenvectors, prop_matrix):
+        self._eigenvectors = eigenvectors
+        self._prop_matrix = prop_matrix
+
+    def __call__(self, img):
+        coeffs = self._eigenvectors.dot(np.sqrt(img).ravel())
+        coeffs = self._prop_matrix.dot(coeffs)
+        return (abs(self._eigenvectors.T.dot(coeffs))**2).reshape(img.shape)
+
+
+@memory.cache
+def propagator(grid_dim=64, preset=PRESET_0):
     fiber_length = 50*1e3 # μm
     npoints = grid_dim
     # 1.5 min for 64 points, 5.5 min for 128
     wavelength = 0.6328 # μm
 
     img_shape = (npoints, npoints)
-    area_size = 2.5 * diam/2
-    profile_params_gen = dict(npoints=npoints, areaSize=area_size)
-    profile_params_parab = dict(n1=1.45, a=diam/2, NA=0.22)
+    profile_params_gen = dict(npoints=npoints, areaSize=preset['areaSize'])
+    profile_params_parab = dict(n1=preset["n1"], a=preset["a"], NA=preset["NA"])
     solver_params = dict(curvature=None, propag_only=True, boundary="close")
 
-    try:
-        with np.load("fiber_properties.npz") as data:
-            prop_matrix = data["prop_matrix"]
-            eigenvectors = data["eigenvectors"]
-    except FileNotFoundError:
-        profile = pyMMF.IndexProfile(**profile_params_gen)
-        profile.initParabolicGRIN(**profile_params_parab)
+    profile = pyMMF.IndexProfile(**profile_params_gen)
+    profile.initParabolicGRIN(**profile_params_parab)
 
-        solver = pyMMF.propagationModeSolver()
-        solver.setIndexProfile(profile)
-        solver.setWL(wavelength)
+    solver = pyMMF.propagationModeSolver()
+    solver.setIndexProfile(profile)
+    solver.setWL(wavelength)
 
-        n_modes_max = pyMMF.estimateNumModesGRIN(wavelength, diam/2,
-                                                 profile_params_parab["NA"])
+    n_modes_max = pyMMF.estimateNumModesGRIN(wavelength, profile_params_parab["a"],
+                                             profile_params_parab["NA"])
 
-        n_calc_modes = n_modes_max + 10
+    n_calc_modes = n_modes_max + 10
 
-        modes = solver.solve(mode="eig", nmodesMax=n_calc_modes, **solver_params)
+    modes = solver.solve(mode="eig", nmodesMax=n_calc_modes, **solver_params)
 
-        prop_matrix = modes.getPropagationMatrix(fiber_length)
+    prop_matrix = modes.getPropagationMatrix(fiber_length)
 
-        # eigenvectors = np.array([modes.profiles[m] for m in range(n_calc_modes)])
-        eigenvectors = np.array(modes.profiles)
-        # Shape of `eigenvectors`: (n_calc_modes, npoints**2)
-        np.savez_compressed("fiber_properties", prop_matrix=prop_matrix, eigenvectors=eigenvectors)
+    # eigenvectors = np.array([modes.profiles[m] for m in range(n_calc_modes)])
+    eigenvectors = np.array(modes.profiles)
+    # Shape of `eigenvectors`: (n_calc_modes, npoints**2)
 
     def propagate_image(img):
         """
@@ -67,10 +78,14 @@ def propagator(grid_dim=64):
         coeffs = prop_matrix.dot(coeffs)
         return (abs(eigenvectors.T.dot(coeffs))**2).reshape(img_shape)
 
-    return propagate_image
+    return _Propagator(eigenvectors, prop_matrix)
 
 
 def main():
+    from time import perf_counter
+
+    t_start = perf_counter()
+
     npoints = 128
     img_shape = (npoints, npoints)
     img = np.zeros(img_shape)
@@ -83,6 +98,9 @@ def main():
     propagate_func = propagator(npoints)
 
     img_after_fiber = propagate_func(img)
+
+    t_end = perf_counter()
+    print(f"Took {t_end - t_start} s")
 
     plt.subplot(121)
     plt.imshow(img)
