@@ -136,3 +136,6 @@ speckle_patterns/
 
 # Bucket detector data
 bucket_data/
+
+# Cache
+cachedir/**
