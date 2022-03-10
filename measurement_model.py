@@ -66,6 +66,15 @@ class GIMeasurementModel:
         in which case it has to be measured in μm.
     unit : str, optional
         The unit of pixel_size.
+    suffix : str
+        Short descriptor for illumination pattern origin.
+        Empty before initialization. After initialization, the first letter
+        may be 'p' (pseudorandom patterns), 'q' (quasirandom patterns)
+        or 'c' (patterns are loaded instead of being generated).
+        If patterns are generated,
+        the second letter may be 'b' (binary patterns before fiber)
+        or 'p' (random phase patterns before fiber).
+        The remaining letters are ID of fiber_options argument.
     """
 
     def __init__(self, n_patterns: int, img_shape: Optional[Tuple[int, int]]=None, # pylint: disable=R0913
@@ -76,9 +85,11 @@ class GIMeasurementModel:
         self.unit = unit
         self._fiber_opts = fiber_opts
         logger.info("Using optical fiber options %s", self._fiber_opts)
+        self.suffix = ""
         if "*" in pattern_type:
             illum_patterns = self._load_speckle_patterns(img_shape, pattern_type)
             self.img_shape = illum_patterns.shape[1:]
+            self.suffix = "c"
         else:
             if img_shape is None:
                 raise ValueError(
@@ -87,12 +98,16 @@ class GIMeasurementModel:
             self.img_shape = img_shape
             if pattern_type == "pseudorandom":
                 illum_patterns = self._pseudorandom_patterns()
+                self.suffix = "pb" + str(fiber_opts.id)
             elif pattern_type == "quasirandom":
                 illum_patterns = self._quasirandom_patterns()
+                self.suffix = "qb" + str(fiber_opts.id)
             elif pattern_type == "pseudorandom-phase":
                 illum_patterns = self._pseudorandom_patterns(phase=True)
+                self.suffix = "pp" + str(fiber_opts.id)
             elif pattern_type == "quasirandom-phase":
                 illum_patterns = self._quasirandom_patterns(phase=True)
+                self.suffix = "qp" + str(fiber_opts.id)
         self.mt_op = illum_patterns.reshape((self.n_patterns, -1))
 
     def mt_op_part(self, n_patterns: Optional[int]=None) -> np.ndarray:

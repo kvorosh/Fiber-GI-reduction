@@ -81,8 +81,8 @@ def compressive_tv(measurement, mt_op, img_shape, alpha=None):
 
 
 def figure_name_format(img_id, n_patterns, noise_var=0., kind="", alpha=None,
-                       other_params=None, pattern_type="p"):
-    name = f"{img_id}_{pattern_type}_{n_patterns}_{noise_var:.0e}_{kind}"
+                       other_params=None, meas_mod_desc=""):
+    name = f"{img_id}_{meas_mod_desc}_{n_patterns}_{noise_var:.0e}_{kind}"
     if alpha is not None:
         if alpha != "":
             try:
@@ -150,7 +150,7 @@ def finding_alpha(img_id: int = 3, noise_var: float = 0, proc_kind: str = "l1") 
         estimate = processing_method[proc_kind](measurement, alpha=alpha)
         save_image_for_show(
             estimate, figure_name_format(img_id, noise_var, proc_kind,
-                                         alpha=alpha),
+                                         alpha=alpha, meas_mod_desc=model.suffix),
             rescale=True
         )
     logger.info("Done for imd_id = %s, noise_var = %.3g and proc_kind = %s",
@@ -266,7 +266,7 @@ def finding_iter_params(img_id: int = 3, noise_var: float = 0) -> None:
         estimate = GIDenseReductionIter(model)(measurement, relax=relax,
                                                n_iter=1000000, print_progress=pp)
         save_image_for_show(estimate, figure_name_format(
-            img_id, noise_var, "red-iter", alpha=relax
+            img_id, noise_var, "red-iter", alpha=relax, meas_mod_desc=model.suffix
         ), rescale=True)
         if pp:
             plt.plot(pp)
@@ -355,24 +355,31 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024,
 
     if save:
         if src_img is not None:
-            save_image_for_show(src_img, figure_name_format(img_id, n_patterns, noise_var, "src",
-                                                            "", pattern_type=pattern_type[0] + str(fiber_opts['id'])), unit_scale=True)
+            save_image_for_show(src_img, figure_name_format(
+                img_id, n_patterns, noise_var, "src", "",
+                meas_mod_desc=model.suffix
+            ), unit_scale=True)
         save_image_for_show(estimates[TraditionalGI.name],
-                            figure_name_format(img_id, n_patterns, noise_var, TraditionalGI.name,
-                                               "", pattern_type=pattern_type[0] + str(fiber_opts['id'])), rescale=True)
+                            figure_name_format(
+                                img_id, n_patterns, noise_var, TraditionalGI.name,
+                                "", meas_mod_desc=model.suffix
+                           ), rescale=True)
         for cs_method in cs_processing_methods:
             save_image_for_show(
                 estimates[cs_method.name], figure_name_format(
                     img_id, n_patterns, noise_var, cs_method.name,
                     alpha=alpha_values[(cs_method.name, img_id, float(noise_var))],
-                    pattern_type=pattern_type[0] + str(fiber_opts['id'])
+                    meas_mod_desc=model.suffix
                 ), rescale=True
             )
-        save_image_for_show(estimates[GIDenseReduction.name], figure_name_format(img_id, n_patterns, noise_var, GIDenseReduction.name,
-                                                        "", pattern_type=pattern_type[0] + str(fiber_opts['id'])), rescale=True)
+        save_image_for_show(estimates[GIDenseReduction.name], figure_name_format(
+            img_id, n_patterns, noise_var, GIDenseReduction.name, "",
+            meas_mod_desc=model.suffix
+        ), rescale=True)
         save_image_for_show(estimates[GISparseReduction.name], figure_name_format(
             img_id, n_patterns, noise_var, GISparseReduction.name,
-            tau_values[(img_id, float(noise_var))], pattern_type=pattern_type[0] + str(fiber_opts['id'])
+            tau_values[(img_id, float(noise_var))],
+            meas_mod_desc=model.suffix
         ), rescale=True)
 
     if show:
