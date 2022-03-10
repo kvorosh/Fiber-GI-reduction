@@ -74,7 +74,11 @@ def propagator(grid_dim=64, preset=PRESET_0):
         ndarray
             The image at the output of the array.
         """
-        coeffs = eigenvectors.dot(np.sqrt(img).ravel())
+        if np.iscomplexobj(img):
+            img2 = img
+        else:
+            img2 = np.sqrt(img)
+        coeffs = eigenvectors.dot(img2.ravel())
         coeffs = prop_matrix.dot(coeffs)
         return (abs(eigenvectors.T.dot(coeffs))**2).reshape(img_shape)
 

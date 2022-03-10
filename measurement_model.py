@@ -35,9 +35,11 @@ class GIMeasurementModel:
         are loaded from files instead of calculations. In that case if it is not None,
         the loaded patterns are resized to approximately given size
         ('approximately' because since skimage.transform.downscale_local_mean is used).
-    pattern_type : {"pseudorandom", "quasirandom", "speckle"}, optional
+    pattern_type : {"pseudorandom", "quasirandom", "pseudorandom-phase",
+                    "quasirandom-phase", "speckle"}, optional
         What illumination patterns to use. Valid values are "pseudorandom",
-        "quasirandom" (corresponding to binary pseudo- or quasirandom patterns
+        "quasirandom", "pseudorandom-phase", "quasirandom-phase"
+        (corresponding to binary or random-phase pseudo- or quasirandom patterns
         which then pass through the optical fiber) and "speckle" (corresponding
         to acquired photos of illumination patterns). Photos are loaded from
         the files 'speckle_patterns/slmX', where X are integers starting from 0
@@ -87,6 +89,10 @@ class GIMeasurementModel:
                 illum_patterns = self._pseudorandom_patterns()
             elif pattern_type == "quasirandom":
                 illum_patterns = self._quasirandom_patterns()
+            elif pattern_type == "pseudorandom-phase":
+                illum_patterns = self._pseudorandom_patterns(phase=True)
+            elif pattern_type == "quasirandom-phase":
+                illum_patterns = self._quasirandom_patterns(phase=True)
         self.mt_op = illum_patterns.reshape((self.n_patterns, -1))
 
     def mt_op_part(self, n_patterns: Optional[int]=None) -> np.ndarray:
@@ -126,29 +132,44 @@ class GIMeasurementModel:
         """
         return self.mt_op[: n_patterns, ...].reshape((-1,) + self.img_shape)
 
-    def _pseudorandom_patterns(self):
+    def _pseudorandom_patterns(self, phase=False):
         rng = np.random.default_rng(2021)
         #TODO Allow for non-square images
         #TODO pass self.img_shape and self.pixel_size to pyMMF calculations
         propagate_func = propagator(self.img_shape[0], self._fiber_opts)
-        illum_patterns = rng.integers(0, 1, size=(self.n_patterns,) + self.img_shape,
-                                          endpoint=True)
+        if phase:
+            illum_patterns = rng.random(size=(self.n_patterns,) + self.img_shape).astype(float)*2*np.pi
+        else:
+            illum_patterns = rng.integers(0, 1, size=(self.n_patterns,) + self.img_shape,
+                                          endpoint=True).astype(float)
         for i in range(self.n_patterns):
-            illum_patterns[i, ...] = propagate_func(illum_patterns[i, ...])
+            if phase:
+                img = np.exp(1j*illum_patterns[i, ...])
+            else:
+                img = illum_patterns[i, ...]
+            illum_patterns[i, ...] = propagate_func(img)
         return illum_patterns
 
-    def _quasirandom_patterns(self):
+    def _quasirandom_patterns(self, phase=False):
         propagate_func = propagator(self.img_shape[0], self._fiber_opts)
 
         gen = Sobol(
             self.img_shape[0]*self.img_shape[1], scramble=False, seed=2021
         ).fast_forward(1)
-        illum_patterns = (gen.random(self.n_patterns) >= 0.5).reshape(
+        illum_patterns = gen.random(self.n_patterns).reshape(
             (self.n_patterns,) + self.img_shape
-        ).astype(int)
+        )
+        if phase:
+            illum_patterns *= 2*np.pi
+        else:
+            illum_patterns = (illum_patterns >= 0.5).astype(float)
 
         for i in range(self.n_patterns):
-            illum_patterns[i, ...] = propagate_func(illum_patterns[i, ...])
+            if phase:
+                img = np.exp(1j*illum_patterns[i, ...])
+            else:
+                img = illum_patterns[i, ...]
+            illum_patterns[i, ...] = propagate_func(img)
         return illum_patterns
 
     def _load_speckle_patterns(self, img_shape, pattern_template):
