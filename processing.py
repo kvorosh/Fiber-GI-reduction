@@ -321,11 +321,13 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024,
     # but this provides the same results faster.
 
 
-    cs_processing_methods = [GICompressiveSensingL1DCT,
-                             # GICompressiveSensingL1Haar,
-                             GICompressiveTC2,
-                             GICompressiveAnisotropicTotalVariation,
-                             GICompressiveAnisotropicTotalVariation2]
+    cs_processing_methods = [
+        GICompressiveSensingL1DCT,
+        GICompressiveSensingL1Haar,
+        GICompressiveTC2,
+        GICompressiveAnisotropicTotalVariation,
+        GICompressiveAnisotropicTotalVariation2
+    ]
 
     for processing_method in cs_processing_methods:
         t_estim_start = perf_counter()
