@@ -47,7 +47,11 @@ class GICompressiveSensing(GIProcessingMethod):
         raise NotImplementedError("Not implemented for the abstract class!")
 
     def _postprocess(self, estimate) -> np.ndarray:
-        return estimate.reshape(self._measurement_model.img_shape)
+        try:
+            reshaped_estimate = estimate.reshape(self._measurement_model.img_shape)
+        except AttributeError:
+            return None
+        return reshaped_estimate
 
     def __call__(self, measurement, # pylint: disable=W0221
                  alpha: Optional[float]=None, full: bool=False, **kwargs) -> np.ndarray:
@@ -91,7 +95,7 @@ class GICompressiveSensing(GIProcessingMethod):
             fidelity = cp_sum((measurement - mt_op @ estimate)**2)
             objective = cp.Minimize(fidelity + alpha*sparsity)
             prob = cp.Problem(objective)
-            try_solving_until_success(prob, [cp.OSQP, cp.ECOS, cp.SCS])
+            try_solving_until_success(prob, [cp.OSQP, cp.ECOS, cp.SCS], estimate)
             fidelity = fidelity.value
             sparsity = sparsity.value
         result = self._postprocess(estimate.value)

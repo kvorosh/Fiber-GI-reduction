@@ -3,6 +3,7 @@
 @author: balakin
 """
 
+import logging
 from functools import partial
 from typing import Sequence
 
@@ -10,6 +11,9 @@ import cvxpy as cp
 import matplotlib.pyplot as plt
 import numpy as np
 from imageio import imread, imwrite
+
+
+logger = logging.getLogger("FGI-red.misc")
 
 
 def load_demo_image(img_id=0, full_span=False, pad_by=0):
@@ -122,7 +126,7 @@ def save_vectors(fname, vectors, names, with_ind=True, num_fmt="%.18e"):
 
 
 def try_solving_until_success(problem: cp.problems.problem.Problem,
-                              solvers: Sequence[str], **kwargs):
+                              solvers: Sequence[str], check_value=None, **kwargs):
     """
     Try using different solvers on the optimization problem until one succeeds.
     The first used one is the default one, followed by those listed in `solvers`
@@ -144,6 +148,9 @@ def try_solving_until_success(problem: cp.problems.problem.Problem,
     """
     try:
         problem.solve(**kwargs)
+        if check_value is not None and check_value.value is None:
+            logger.info("Result is None for the default method")
+            raise cp.error.SolverError
     except cp.error.SolverError as e:
         try:
             solvers.remove(problem.solver_stats.solver_name)
@@ -154,6 +161,9 @@ def try_solving_until_success(problem: cp.problems.problem.Problem,
         for solver in solvers:
             try:
                 problem.solve(solver=solver, **kwargs)
+                if check_value is not None and check_value.value is None:
+                    logger.info(f"Result is None for method {solver}")
+                    raise cp.error.SolverError
             except cp.error.SolverError:
                 pass
             else:
