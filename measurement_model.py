@@ -9,7 +9,13 @@ from pathlib import Path
 from time import perf_counter
 from typing import Optional, Tuple
 
-from cached_property import cached_property
+# cached_property is in the standard library from Python 3.8
+try:
+    from functools import cached_property
+# If it isn't available, try the following package
+except ImportError:
+    from cached_property import cached_property
+
 import numpy as np
 from imageio import imread
 from scipy.stats.qmc import Sobol
