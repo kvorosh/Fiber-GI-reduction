@@ -95,7 +95,8 @@ def figure_name_format(img_id, n_patterns, noise_var=0., kind="", alpha=None,
 
 
 def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 1024,
-                         pattern_type: str="pseudorandom", img_shape=None, fiber_opts=PRESET_0):
+                         pattern_type: str="pseudorandom", img_shape=None,
+                         fiber_opts=PRESET_0, n_measurements: int=1):
     if not isinstance(data_source, int):
         measurement = data_source
         n_patterns = measurement.size
@@ -110,7 +111,11 @@ def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 
 
     if isinstance(data_source, int): # pylint: disable=R1705
         src_img = load_demo_image(data_source)
-        measurement = model.simulate_measurement(src_img, noise_var)
+        if n_measurements > 1:
+            measurement = [model.simulate_measurement(src_img, noise_var)
+                           for _ in range(n_measurements)]
+        else:
+            measurement = model.simulate_measurement(src_img, noise_var)
     return measurement, model
 
 
