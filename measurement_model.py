@@ -98,16 +98,16 @@ class GIMeasurementModel:
             self.img_shape = img_shape
             if pattern_type == "pseudorandom":
                 illum_patterns = self._pseudorandom_patterns()
-                self.suffix = "pb" + str(fiber_opts.id)
+                self.suffix = "pb" + str(fiber_opts["id"])
             elif pattern_type == "quasirandom":
                 illum_patterns = self._quasirandom_patterns()
-                self.suffix = "qb" + str(fiber_opts.id)
+                self.suffix = "qb" + str(fiber_opts["id"])
             elif pattern_type == "pseudorandom-phase":
                 illum_patterns = self._pseudorandom_patterns(phase=True)
-                self.suffix = "pp" + str(fiber_opts.id)
+                self.suffix = "pp" + str(fiber_opts["id"])
             elif pattern_type == "quasirandom-phase":
                 illum_patterns = self._quasirandom_patterns(phase=True)
-                self.suffix = "qp" + str(fiber_opts.id)
+                self.suffix = "qp" + str(fiber_opts["id"])
         self.mt_op = illum_patterns.reshape((self.n_patterns, -1))
 
     def mt_op_part(self, n_patterns: Optional[int]=None) -> np.ndarray:
@@ -153,7 +153,9 @@ class GIMeasurementModel:
         #TODO pass self.img_shape and self.pixel_size to pyMMF calculations
         propagate_func = propagator(self.img_shape[0], self._fiber_opts)
         if phase:
+            logger.info("Preparing %d pseudorandom phase patterns", self.n_patterns)
             illum_patterns = rng.random(size=(self.n_patterns,) + self.img_shape).astype(float)*2*np.pi
+            logger.info("Prepared %d pseudorandom phase patterns", self.n_patterns)
         else:
             illum_patterns = rng.integers(0, 1, size=(self.n_patterns,) + self.img_shape,
                                           endpoint=True).astype(float)
