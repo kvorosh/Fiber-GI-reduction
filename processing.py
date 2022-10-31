@@ -425,6 +425,23 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024,
         plt.show()
 
 
+def for_report_picking_tau_data(img_id=3, noise_var=0., n_measurements=1024,
+                           pattern_type: str="pseudorandom", fiber_opts=PRESET_0) -> None:
+    measurement, model = prepare_measurements(
+        img_id, noise_var=noise_var, n_patterns=n_measurements,
+        pattern_type=pattern_type,
+        img_shape=(128, 128),
+        fiber_opts=fiber_opts
+    )
+
+    measurement -= measurement.mean()
+
+    estimator = GISparseReduction(model)
+    result, ratios = estimator(measurement, thresholding_coeff=1.,
+                       basis="eig", full=True, skip_tv=True)
+    np.save(f"ratios-{img_id}.npy", ratios)
+
+
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var, n_patterns=n_measurements,
@@ -576,6 +593,10 @@ if __name__ == "__main__":
     # show_methods(7, 1e-1)
     show_methods(3, 1e-1, n_patterns=1024, save=True, show=False,
                  pattern_type="pseudorandom", fiber_opts=PRESET_1)
+    # for_report_picking_tau_data(3, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
+    # for_report_picking_tau_data(2, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
+    # for_report_picking_tau_data(6, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
+    # for_report_picking_tau_data(7, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
     # finding_alpha(3, 0., "l1")
     # finding_alpha(3, 0., "l1h")
     # finding_alpha(3, 0., "tc2")
