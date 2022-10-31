@@ -331,19 +331,22 @@ class GISparseReduction(GIDenseReduction):
 
         """
         t_start = perf_counter()
-        if basis == "eig":
-            red_res, sing_val, sing_vec = super().__call__(measurement, eig=True)
-            if thresholding_coeff > 0:
-                red_res = do_thresholding(red_res, basis=basis,
-                                          thresholding_coeff=thresholding_coeff,
-                                          sing_val=sing_val, sing_vec=sing_vec,
-                                          full=full)
-        else:
-            red_res, cov_op = super().__call__(measurement, calc_cov_op=True)
-            if thresholding_coeff > 0:
-                red_res = do_thresholding(red_res, cov_op, basis=basis,
-                                          thresholding_coeff=thresholding_coeff,
-                                          full=full)
+        try:
+            red_res = kwargs["red_res"]
+        except KeyError:
+            if basis == "eig":
+                red_res, sing_val, sing_vec = super().__call__(measurement, eig=True)
+                if thresholding_coeff > 0:
+                    red_res = do_thresholding(red_res, basis=basis,
+                                              thresholding_coeff=thresholding_coeff,
+                                              sing_val=sing_val, sing_vec=sing_vec,
+                                              full=full)
+            else:
+                red_res, cov_op = super().__call__(measurement, calc_cov_op=True)
+                if thresholding_coeff > 0:
+                    red_res = do_thresholding(red_res, cov_op, basis=basis,
+                                              thresholding_coeff=thresholding_coeff,
+                                              full=full)
 
         if skip_tv:
             return red_res
