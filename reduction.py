@@ -117,6 +117,7 @@ class GIDenseReductionIter(GIProcessingMethod):
 
     def __call__(self, measurement, n_iter: Optional[int]=None, relax=0.15, # pylint: disable=W0221
                  start_from=None, print_progress=False, nonzero=False,
+                 return_cond=None,
                  **kwargs) -> np.ndarray:
         """
         Estimate the image using measurement reduction method without
@@ -137,12 +138,16 @@ class GIDenseReductionIter(GIProcessingMethod):
             but may result in overshooting or numerical instability.
         start_from : array_like or None, optional
             The initial approximation. If None, zero vector is used.
+        return_cond : optional
+            Return the intermediate results obtained after ith iteration
+            if return_cond(i) is True. If None, only the final result is returned.
 
         Returns
         -------
-        numpy.ndarray
+        result : numpy.ndarray
             The estimated image.
-
+        intermediate_results : list of (int, numpy.ndarray)
+            The intermediate results after the specified number of iterations.
         """
         mt_op = self._mt_op(measurement.size)
         if start_from is None:
@@ -151,18 +156,28 @@ class GIDenseReductionIter(GIProcessingMethod):
             red_res = np.copy(start_from).ravel()
         if n_iter is None:
             n_iter = measurement.size
-        for i in trange(n_iter):
+        if return_cond is not None:
+            intermediate_results = []
+        for i in range(n_iter):
             ind = i % mt_op.shape[0]
             row = mt_op[ind, :]
             correction_scal = (measurement[ind] - row.dot(red_res))/(row.dot(row))
             red_res += row * relax * correction_scal
             if nonzero:
                 red_res = red_res.clip(0, None)
-            # if print_progress:
-                # print(i, correction_scal*row.dot(row))
             if isinstance(print_progress, list):
                 print_progress.append(correction_scal*row.dot(row))
-        return red_res.reshape(self._measurement_model.img_shape)
+            if return_cond is not None and return_cond(i):
+                # If one does not copy, "+=" above results
+                # in the same vector added to intermediate results for all iterations
+                intermediate_results.append((
+                    i, np.copy(red_res).reshape(self._measurement_model.img_shape)
+                ))
+        result = red_res.reshape(self._measurement_model.img_shape)
+        if return_cond is None:
+            return result
+        else:
+            return result, intermediate_results
 
 
 def do_thresholding(data, cov_op=None, basis="haar", thresholding_coeff=0., kind="hard",
