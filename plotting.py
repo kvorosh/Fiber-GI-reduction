@@ -9,6 +9,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+def num_to_letter(num: int) -> str:
+    """
+    Return a letter to be used as a subfigure label.
+
+    Parameters
+    ----------
+    num : int
+        Number of the subfigure, starting with 0.
+
+    Returns
+    -------
+    letter : str
+        The corresponding letter.
+    """
+    return chr(ord('a') + num)
+
+
 def for_report_picking_tau():
     img_ids = [3, 2, 6, 7]
     taus = {3: 3.2, 2: 5.6, 6: 6.0, 7: 4.5}
@@ -40,7 +57,7 @@ def for_report_picking_tau():
         ax.semilogx(ratios2, n_0_comps2)
         # ax.plot(ratios2, n_0_comps2)
         ax.axvline(taus[img_id], color="r")
-        ax.set_title(f"({chr(ord('a') + i)})")
+        ax.set_title(f"({num_to_letter(i)})")
         ax.set_xlabel("τ")
         ax.set_ylabel("m")
 
