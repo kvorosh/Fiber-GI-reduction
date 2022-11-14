@@ -296,8 +296,15 @@ class GISparseReduction(GIDenseReduction):
     name = "reds"
     desc = "Редукция измерений при дополнительной информации об объекте"
 
+    def __init__(self, measurement_model):
+        super().__init__(measurement_model)
+        # Set up the optimization problem
+        self._opt_problems = {} # A dictionary of previously solved optimization problems
+        # to use for warm start
+
     def __call__(self, measurement, thresholding_coeff: float=1.,
                  basis: str="eig", skip_tv: bool=False, full: bool=False,
+                 warm_start=True,
                  **kwargs) -> np.ndarray:
         """
         Estimate the image using measurement reduction method using
@@ -323,6 +330,9 @@ class GISparseReduction(GIDenseReduction):
         full : bool
             Whether to return the ratios used for thresholding.
             The default is False.
+        warm_start : bool
+            Whether to use 'warm start', that is, reusing the byproducts
+            of solving the previous optimization problem. The default is True.
 
         Returns
         -------
@@ -354,17 +364,37 @@ class GISparseReduction(GIDenseReduction):
             red_res, remainder = red_res
         #TODO Omit the following if sufficient measurement data to estimate the image
         mt_op = self._mt_op(measurement.size)
-        expected_measurement = mt_op.dot(red_res.ravel())
-        f = cp.Variable(mt_op.shape[1])
-        f2 = cp_reshape(f, self._measurement_model.img_shape)
-        sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
-                          + cp_norm1(cp_diff(f2, k=1, axis=1)))**2
-        # sparsity_term = cp.atoms.total_variation.tv(f2)**2
-        objective = cp.Minimize(sparsity_term)
-        constraints = [mt_op @ f == expected_measurement]
-        prob = cp.Problem(objective, constraints)
+        if warm_start and mt_op.shape[0] in self._opt_problems:
+            prob, expected_measurement, f = self._opt_problems[mt_op.shape[0]]
+            logger.info(f"Using warm start from {mt_op.shape[0]} measurements")
+        else:
+            logger.info(f"No previous problem to warm start from for {mt_op.shape[0]} measurements")
+            expected_measurement = cp.Parameter(mt_op.shape[0])
+            f = cp.Variable(mt_op.shape[1])
+            f2 = cp_reshape(f, self._measurement_model.img_shape)
+            sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
+                              + cp_norm1(cp_diff(f2, k=1, axis=1)))**2
+            # sparsity_term = cp.atoms.total_variation.tv(f2)**2
+            # objective = cp.Minimize(sparsity_term)
+            # constraints = [mt_op @ f == expected_measurement]
+            # prob = cp.Problem(objective, constraints)
+            # In theory, the code above from objective = ... to prob = ...
+            # is the correct one. However, CVXPY do not seem to be robust enough
+            # to deal with constrained optimization instead of unconstrained one below.
+            # In addition, it is faster.
+            fidelity = cp.sum((mt_op @ f - expected_measurement)**2)
+            #TODO A more intelligent way of picking the alpha value
+            # to avoid constrained optimization.
+            alpha = 1e-5
+            objective = cp.Minimize(fidelity + alpha*sparsity_term)
+            prob = cp.Problem(objective)
+
+            self._opt_problems[mt_op.shape[0]] = (prob, expected_measurement, f)
+
+        expected_measurement.value = mt_op.dot(red_res.ravel())
+
         #TODO Is there an easier way of trying all available solvers until one succeeds?
-        try_solving_until_success(prob, [cp.OSQP, cp.ECOS, cp.SCS])
+        try_solving_until_success(prob, [cp.OSQP, cp.ECOS, cp.SCS], warm_start=warm_start)
         t_end = perf_counter()
         logger.info("Sparse reduction took %.3g s for A shape %s",
                     t_end - t_start, mt_op.shape)
