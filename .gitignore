@@ -140,3 +140,7 @@ bucket_data/
 # Cache
 cachedir/**
 tmp-data/*
+
+# Figure output directory
+figures/*.png
+figures/*.pdf

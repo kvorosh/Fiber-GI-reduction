@@ -442,6 +442,69 @@ def for_report_picking_tau_data(img_id=3, noise_var=0., n_measurements=1024,
     np.save(f"tmp-data/ratios-{img_id}.npy", ratios)
 
 
+def for_report_intermediate_results(img_id, skip_thr=False):
+    noise_var = 0.1
+    n_measurements = 1024
+    pattern_type = "pseudorandom-phase"
+
+    logger.info(f"Started calculating intermediate results for img_id = {img_id}")
+    measurement, model = prepare_measurements(
+        img_id, noise_var=noise_var,
+        n_patterns=n_measurements,
+        pattern_type=pattern_type,
+        img_shape=(128, 128),
+        fiber_opts=PRESET_1
+    )
+    # measurement -= measurement.mean()
+    logger.info("Done simulating measurements")
+
+    tau_values = {(2, 0.0): 1.0, (2, 0.1): 5.6,
+                    (3, 0.): 1e-05, (3, 0.1): 3.7,
+                    (6, 0.): 1.0, (6, 0.1): 1.,
+                    (7, 0.): 10.0, (7, 0.1): 1.}
+    tau_values = defaultdict(lambda: 1., tau_values)
+
+
+    fname = f"tmp-data/intermediate-{img_id}.npz"
+    estimator_sparse = GISparseReduction(model)
+    try:
+        frames = dict(np.load(fname))
+    except FileNotFoundError:
+        frames = {}
+    if "direct" not in frames:
+        frames["direct"] = estimator_sparse(
+            measurement, tau_values[(img_id, noise_var)], basis="eig"
+        )
+        np.savez(fname, **frames)
+    red_linear = GIDenseReduction(model)
+    red_linear_iter = GIDenseReductionIter(model)
+    relax = 0.3#0.15
+    n_cycles = 1024
+    # 1 cycle is measurement.size iterations
+    _, sing_val, sing_vec = red_linear(measurement, eig=True)
+    interm_iter_nos = 2**np.arange(0, 21, 3)
+    result_lin_iter, interm = red_linear_iter(measurement, n_iter=n_cycles*measurement.size,
+                                              return_cond=lambda n: n in interm_iter_nos,
+                                              relax=relax)
+    if interm[-1][0] != n_cycles*measurement.size:
+        interm.append((n_cycles*measurement.size, result_lin_iter))
+    logger.info("Done Kaczmarz's method")
+    from reduction import do_thresholding
+    for iter_no, interm_result in interm:
+        key = "iter" + str(iter_no)
+        if key in frames:
+            continue
+        logger.info(f"Starting optimization for iteration {iter_no}")
+        interm_result = do_thresholding(interm_result, basis="eig",
+                                        thresholding_coeff=tau_values[(img_id, noise_var)],
+                                        sing_val=sing_val, sing_vec=sing_vec)
+        frames[key] = estimator_sparse(measurement, tau_values[(img_id, noise_var)],
+                                       red_res=interm_result)
+        logger.info(f"Done optimization for iteration {iter_no}")
+        np.savez(fname, **frames)
+    logger.info(f"Finished calculating intermediate results for img_id = {img_id}")
+
+
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var, n_patterns=n_measurements,
@@ -597,6 +660,8 @@ if __name__ == "__main__":
     # for_report_picking_tau_data(2, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
     # for_report_picking_tau_data(6, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
     # for_report_picking_tau_data(7, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
+    # for img_id in [3, 2, 6, 7]:
+    #     for_report_intermediate_results(img_id)
     # finding_alpha(3, 0., "l1")
     # finding_alpha(3, 0., "l1h")
     # finding_alpha(3, 0., "tc2")

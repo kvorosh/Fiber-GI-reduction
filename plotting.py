@@ -7,6 +7,8 @@ Created on Sun Oct 30 15:14:12 2022
 
 import numpy as np
 import matplotlib.pyplot as plt
+from measurement_model import pad_or_trim_to_shape
+from misc import load_demo_image
 
 
 def num_to_letter(num: int) -> str:
@@ -24,6 +26,58 @@ def num_to_letter(num: int) -> str:
         The corresponding letter.
     """
     return chr(ord('a') + num)
+
+
+def for_report_intermediate():
+    img_ids = [3, 2, 6, 7]
+
+    nrows = 6
+    ncols = len(img_ids)
+
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols,
+                            # figsize=(16/2.54, ncols*8/2.54),
+                            figsize=(15/2.54, 15/2.54),
+                            constrained_layout=True)
+    if ncols == 1:
+        axs = axs.reshape((-1, 1))
+
+    for col_no, img_id in enumerate(img_ids):
+        fname = f"tmp-data/intermediate-{img_id}.npz"
+
+        data = np.load(fname)
+        frame_nos = [int(k[4:]) for k in data.keys() if k != "direct"]
+        frame_nos.sort()
+        for k in data.keys():
+            img_shape = data[k].shape
+            break
+        src_img = pad_or_trim_to_shape(load_demo_image(img_id), img_shape).astype(float)
+
+        ax = axs[0, col_no]
+        ax.imshow(src_img, cmap=plt.cm.gray)
+        ax.axis('off')
+        ax.set_title(f"({num_to_letter(col_no)})")
+        # frames_to_show = (2**np.arange(11) * 1024)[1::3]
+        # frames_to_show = 2**np.arange(0, 4, 1)
+        frames_to_show = 2**np.array([12, 15, 18, 20])
+        print(frames_to_show)
+        for i, no in enumerate(frames_to_show):
+            res_thr = data["iter" + str(no)]
+            ax = axs[i + 1, col_no]
+            ax.imshow(res_thr, cmap=plt.cm.gray)
+            ax.axis('off')
+            if i == 0:
+                ax.set_title(f"({num_to_letter(col_no + ncols)})")
+            # else:
+            #     ax.set_title(str(no) + " it.")
+        ax = axs[1 + len(frames_to_show), col_no]
+        ax.imshow(data["direct"], cmap=plt.cm.gray)
+        ax.axis('off')
+        ax.set_title(f"({num_to_letter(col_no + 2*ncols)})")
+        data.close()
+
+    plt.savefig("figures/kaczmarz_intermediate.pdf", bbox_inches="tight")
+
+    plt.show()
 
 
 def for_report_picking_tau():
@@ -66,4 +120,5 @@ def for_report_picking_tau():
 
 
 if __name__ == "__main__":
-    for_report_picking_tau()
+    # for_report_picking_tau()
+    for_report_intermediate()
