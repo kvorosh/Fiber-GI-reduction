@@ -439,7 +439,7 @@ def for_report_picking_tau_data(img_id=3, noise_var=0., n_measurements=1024,
     estimator = GISparseReduction(model)
     result, ratios = estimator(measurement, thresholding_coeff=1.,
                        basis="eig", full=True, skip_tv=True)
-    np.save(f"ratios-{img_id}.npy", ratios)
+    np.save(f"tmp-data/ratios-{img_id}.npy", ratios)
 
 
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:

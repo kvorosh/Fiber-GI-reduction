@@ -19,7 +19,7 @@ def for_report_picking_tau():
 
     # img_id = img_ids[0]
     for (i, img_id), ax in zip(enumerate(img_ids), axs.flat):
-        ratios = np.load(f"ratios-{img_id}.npy")
+        ratios = np.load(f"tmp-data/ratios-{img_id}.npy")
         ratios.sort()
 
 
