@@ -323,13 +323,41 @@ class GIProcessingMethod:
     def __init__(self, model: GIMeasurementModel):
         self._measurement_model = model
 
-    def _mt_op(self, n_patterns: Optional[int]=None) -> np.ndarray:
+    def _mt_op(self, n_patterns: Optional[int]=None, downscale_factors=None) -> np.ndarray:
         if n_patterns is None:
-            return self._measurement_model.mt_op
-        return self._measurement_model.mt_op_part(n_patterns)
+            mt_op = self._measurement_model.mt_op
+        else:
+            mt_op = self._measurement_model.mt_op_part(n_patterns)
+        if downscale_factors is not None:
+            factors = (1,) + downscale_factors
+            mt_op = mt_op.reshape((-1, ) + self._measurement_model.img_shape)
+            mt_op = downscale_local_mean(mt_op, factors)
+            mt_op = mt_op.reshape((mt_op.shape[0], -1))
+        return mt_op
 
     def __call__(self, measurement, *args, **kwargs) -> np.ndarray:
         raise NotImplementedError("Not implemented in the general case!")
+
+    def img_shape(self, downscale_factors=None):
+        """
+        The shape of the output image.
+
+        Parameters
+        ----------
+        downscale_factors : 2-tuple of ints or None, optional
+            If not None, downscale the produced image in the specified way.
+            The default is None.
+
+        Returns
+        -------
+        None.
+
+        """
+        orig_shape = self._measurement_model.img_shape
+        if downscale_factors is None:
+            return orig_shape
+        else:
+            return (orig_shape[0]//downscale_factors[0], orig_shape[1]//downscale_factors[1])
 
 
 class TraditionalGI(GIProcessingMethod):
