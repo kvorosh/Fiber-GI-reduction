@@ -28,6 +28,31 @@ def num_to_letter(num: int) -> str:
     return chr(ord('a') + num)
 
 
+def for_report_intermediate_lowres():
+    img_ids = [3, 2, 6, 7]
+    key_seq = ["lr", "lru", "iter-hr"]
+
+    nrows = len(key_seq)
+    ncols = len(img_ids)
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols,
+                            figsize=(15/2.54, 8/2.54), constrained_layout=True)
+    if ncols == 1:
+        axs = axs.reshape((-1, 1))
+
+    for col_no, img_id in enumerate(img_ids):
+        fname = f"tmp-data/interm-lowres-{img_id}.npz"
+        with np.load(fname) as data:
+            imgs = {key: data[key] for key in key_seq}
+        for row_no, key in enumerate(key_seq):
+            ax = axs[row_no, col_no]
+            ax.imshow(imgs[key], cmap=plt.cm.gray)
+            ax.axis("off")
+            ax.set_title(f"({num_to_letter(col_no + row_no*ncols)})")
+
+    plt.savefig("figures/low_resolution_intermediate.pdf", bbox_inches="tight")
+    plt.show()
+
+
 def for_report_intermediate():
     img_ids = [3, 2, 6, 7]
 
@@ -121,4 +146,5 @@ def for_report_picking_tau():
 
 if __name__ == "__main__":
     # for_report_picking_tau()
-    for_report_intermediate()
+    # for_report_intermediate()
+    for_report_intermediate_lowres()

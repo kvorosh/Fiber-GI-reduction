@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import LinearConstraint, minimize
 from scipy.sparse.linalg import lsmr
+from skimage.transform import rescale
 from tqdm import tqdm
 
 from misc import load_demo_image, save_image_for_show
@@ -505,6 +506,84 @@ def for_report_intermediate_results(img_id, skip_thr=False):
     logger.info(f"Finished calculating intermediate results for img_id = {img_id}")
 
 
+def for_report_intermediate_lowres(img_id):
+    noise_var = 0.1
+    n_measurements = 1024
+    pattern_type = "pseudorandom-phase"
+
+    logger.info(f"Started calculating intermediate results for img_id = {img_id}")
+    measurement, model = prepare_measurements(
+        img_id, noise_var=noise_var,
+        n_patterns=n_measurements,
+        pattern_type=pattern_type,
+        img_shape=(128, 128),
+        fiber_opts=PRESET_1
+    )
+    # measurement -= measurement.mean()
+    logger.info("Done simulating measurements")
+
+    tau_values = {(2, 0.0): 1.0, (2, 0.1): 5.6,
+                    (3, 0.): 1e-05, (3, 0.1): 3.7,
+                    (6, 0.): 1.0, (6, 0.1): 1.,
+                    (7, 0.): 10.0, (7, 0.1): 1.}
+    tau_values = defaultdict(lambda: 1., tau_values)
+    factors = (2, 2)
+
+    fname = f"tmp-data/interm-lowres-{img_id}.npz"
+    estimator_sparse = GISparseReduction(model)
+    estimator_iter = GIDenseReductionIter(model)
+    relax = 0.3#0.15
+    estimator_lin = GIDenseReduction(model)
+
+    try:
+        with np.load(fname) as d:
+            data = dict(d)
+    except FileNotFoundError:
+        frames = {}
+    if "direct" not in frames:
+        frames["direct"] = estimator_sparse(
+            measurement, tau_values[(img_id, noise_var)], basis="eig"
+        )
+        np.savez(fname, **frames)
+
+    from reduction import do_thresholding
+
+    if "lr" in frames: # Low-resolution intermediate estimate
+        result_lin_iter = frames["lr"]
+    else:
+        n_cycles = 64#1024
+        _, sing_val, sing_vec = estimator_lin(measurement, eig=True, downscale_factors=factors)
+        result_lin_iter = estimator_iter(measurement, n_iter=n_cycles*measurement.size,
+                                                 relax=relax, downscale_factors=factors)
+        result_lin_iter = do_thresholding(result_lin_iter, basis="eig",
+                                          thresholding_coeff=tau_values[(img_id, noise_var)],
+                                          sing_val=sing_val, sing_vec=sing_vec)
+        result_lin_iter = estimator_sparse(measurement, tau_values[(img_id, noise_var)],
+                                           red_res=result_lin_iter, downscale_factors=factors)
+        frames["lr"] = result_lin_iter
+        np.savez(fname, **frames)
+    if "lru" in frames: # Low-resolution intermediate estimate, upscaled
+        interm_hr = frames["lru"]
+    else:
+        interm_hr = rescale(result_lin_iter, factors)
+        frames["lru"] = interm_hr
+        np.savez(fname, **frames)
+
+    _, sing_val, sing_vec = estimator_lin(measurement, eig=True)
+    n_cycles = 512
+    if "iter-hr" not in frames:
+        result_final = estimator_iter(measurement, n_iter=n_cycles*measurement.size,
+                                      relax=relax, start_from=interm_hr)
+        # logger.info(f"Starting optimization for iteration {iter_no}")
+        result_final = do_thresholding(result_final, basis="eig",
+                                        thresholding_coeff=tau_values[(img_id, noise_var)],
+                                        sing_val=sing_val, sing_vec=sing_vec)
+        frames["iter-hr"] = estimator_sparse(measurement, tau_values[(img_id, noise_var)],
+                                        red_res=result_final)
+        # logger.info(f"Done optimization for iteration {iter_no}")
+        np.savez(fname, **frames)
+
+
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var, n_patterns=n_measurements,
@@ -644,7 +723,6 @@ if __name__ == "__main__":
     # show_single_method(6, 1e-1)
     # show_single_method(7, 0)
     # show_single_method(7, 1e-1)
-    show_single_method(np.load("bucket_data.npy")[: 500].astype(float), 1e-1, pattern_type="speckle")
     # show_methods(8, 1e-1, n_patterns=512, save=True, show=True, pattern_type="speckle")
     # show_methods(3)
     # show_methods(3, 1e-1)
@@ -654,8 +732,6 @@ if __name__ == "__main__":
     # show_methods(6, 1e-1)
     # show_methods(7)
     # show_methods(7, 1e-1)
-    show_methods(3, 1e-1, n_patterns=1024, save=True, show=False,
-                 pattern_type="pseudorandom", fiber_opts=PRESET_1)
     # for_report_picking_tau_data(3, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
     # for_report_picking_tau_data(2, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
     # for_report_picking_tau_data(6, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
@@ -705,6 +781,8 @@ if __name__ == "__main__":
     # finding_alpha_l_curve(7, 1e-1, "l1h")
     # finding_alpha_l_curve(7, 1e-1, "tc2")
     # finding_alpha_l_curve(7, 1e-1, "tva")
+    for img_id in [3, 2, 6, 7]:
+        for_report_intermediate_lowres(img_id)
     # finding_alpha_l_curve(7, 1e-1, "tva2")
     # plot_l_curve(3, 1e-1, "l1")
     # finding_iter_params(3, 0.)
