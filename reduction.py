@@ -46,6 +46,7 @@ class GIDenseReduction(GIProcessingMethod):
     desc = "Редукция измерений без дополнительной информации об объекте"
 
     def __call__(self, measurement, calc_cov_op: bool=False, eig: bool=False, # pylint: disable=W0221
+                 downscale_factors=None,
                  **kwargs) -> np.ndarray:
         """
         Estimate the image using measurement reduction method without
@@ -64,6 +65,8 @@ class GIDenseReduction(GIProcessingMethod):
             Whether to calculate the measurement model eigenbasis.
             If True, the value of calc_cov_op is ignored.
             The default is False.
+        downscale_factors : 2-tuple of ints or None, optional
+            If not None, downscale the produced image in the specified way.
 
         Returns
         -------
@@ -72,7 +75,7 @@ class GIDenseReduction(GIProcessingMethod):
 
         """
         t_start = perf_counter()
-        mt_op = self._mt_op(measurement.size)
+        mt_op = self._mt_op(measurement.size, downscale_factors)
         #TODO Change to iterative methods depending on which is faster
         u, s, vh = np.linalg.svd(mt_op, False, True, False)
         rcond = np.finfo(s.dtype).eps * max(u.shape[0], vh.shape[1])
@@ -81,7 +84,7 @@ class GIDenseReduction(GIProcessingMethod):
         s2 = np.zeros_like(s)
         s2[mask] = 1/s[mask]
         red_res = ((vh.T * s2) @ u.T @ measurement).reshape(
-            self._measurement_model.img_shape
+            self.img_shape(downscale_factors)
         )
         t_end = perf_counter()
         logger.info("Dense measurement reduction took %.3g s",
@@ -118,6 +121,7 @@ class GIDenseReductionIter(GIProcessingMethod):
     def __call__(self, measurement, n_iter: Optional[int]=None, relax=0.15, # pylint: disable=W0221
                  start_from=None, print_progress=False, nonzero=False,
                  return_cond=None,
+                 downscale_factors=None,
                  **kwargs) -> np.ndarray:
         """
         Estimate the image using measurement reduction method without
@@ -141,6 +145,8 @@ class GIDenseReductionIter(GIProcessingMethod):
         return_cond : optional
             Return the intermediate results obtained after ith iteration
             if return_cond(i) is True. If None, only the final result is returned.
+        downscale_factors : 2-tuple of ints or None, optional
+            If not None, downscale the produced image in the specified way.
 
         Returns
         -------
@@ -149,7 +155,7 @@ class GIDenseReductionIter(GIProcessingMethod):
         intermediate_results : list of (int, numpy.ndarray)
             The intermediate results after the specified number of iterations.
         """
-        mt_op = self._mt_op(measurement.size)
+        mt_op = self._mt_op(measurement.size, downscale_factors)
         if start_from is None:
             red_res = np.zeros(mt_op.shape[1])
         else:
@@ -171,9 +177,9 @@ class GIDenseReductionIter(GIProcessingMethod):
                 # If one does not copy, "+=" above results
                 # in the same vector added to intermediate results for all iterations
                 intermediate_results.append((
-                    i, np.copy(red_res).reshape(self._measurement_model.img_shape)
+                    i, np.copy(red_res).reshape(self.img_shape(downscale_factors))
                 ))
-        result = red_res.reshape(self._measurement_model.img_shape)
+        result = red_res.reshape(self.img_shape(downscale_factors))
         if return_cond is None:
             return result
         else:
@@ -304,6 +310,7 @@ class GISparseReduction(GIDenseReduction):
 
     def __call__(self, measurement, thresholding_coeff: float=1.,
                  basis: str="eig", skip_tv: bool=False, full: bool=False,
+                 downscale_factors=None,
                  warm_start=True,
                  **kwargs) -> np.ndarray:
         """
@@ -330,6 +337,8 @@ class GISparseReduction(GIDenseReduction):
         full : bool
             Whether to return the ratios used for thresholding.
             The default is False.
+        downscale_factors : 2-tuple of ints or None, optional
+            If not None, downscale the produced image in the specified way.
         warm_start : bool
             Whether to use 'warm start', that is, reusing the byproducts
             of solving the previous optimization problem. The default is True.
@@ -345,7 +354,7 @@ class GISparseReduction(GIDenseReduction):
             red_res = kwargs["red_res"]
         except KeyError:
             if basis == "eig":
-                red_res, sing_val, sing_vec = super().__call__(measurement, eig=True)
+                red_res, sing_val, sing_vec = super().__call__(measurement, eig=True, downscale_factors=downscale_factors)
                 if thresholding_coeff > 0:
                     red_res = do_thresholding(red_res, basis=basis,
                                               thresholding_coeff=thresholding_coeff,
@@ -356,22 +365,22 @@ class GISparseReduction(GIDenseReduction):
                 if thresholding_coeff > 0:
                     red_res = do_thresholding(red_res, cov_op, basis=basis,
                                               thresholding_coeff=thresholding_coeff,
-                                              full=full)
+                                              full=full, downscale_factors=downscale_factors)
 
         if skip_tv:
             return red_res
         if full:
             red_res, remainder = red_res
         #TODO Omit the following if sufficient measurement data to estimate the image
-        mt_op = self._mt_op(measurement.size)
-        if warm_start and mt_op.shape[0] in self._opt_problems:
-            prob, expected_measurement, f = self._opt_problems[mt_op.shape[0]]
+        mt_op = self._mt_op(measurement.size, downscale_factors)
+        if warm_start and (mt_op.shape[0], downscale_factors) in self._opt_problems:
+            prob, expected_measurement, f = self._opt_problems[(mt_op.shape[0], downscale_factors)]
             logger.info(f"Using warm start from {mt_op.shape[0]} measurements")
         else:
             logger.info(f"No previous problem to warm start from for {mt_op.shape[0]} measurements")
             expected_measurement = cp.Parameter(mt_op.shape[0])
             f = cp.Variable(mt_op.shape[1])
-            f2 = cp_reshape(f, self._measurement_model.img_shape)
+            f2 = cp_reshape(f, self.img_shape(downscale_factors))
             sparsity_term = (cp_norm1(cp_diff(f2, k=1, axis=0))
                               + cp_norm1(cp_diff(f2, k=1, axis=1)))**2
             # sparsity_term = cp.atoms.total_variation.tv(f2)**2
@@ -389,7 +398,7 @@ class GISparseReduction(GIDenseReduction):
             objective = cp.Minimize(fidelity + alpha*sparsity_term)
             prob = cp.Problem(objective)
 
-            self._opt_problems[mt_op.shape[0]] = (prob, expected_measurement, f)
+            self._opt_problems[(mt_op.shape[0], downscale_factors)] = (prob, expected_measurement, f)
 
         expected_measurement.value = mt_op.dot(red_res.ravel())
 
@@ -399,7 +408,7 @@ class GISparseReduction(GIDenseReduction):
         logger.info("Sparse reduction took %.3g s for A shape %s",
                     t_end - t_start, mt_op.shape)
         try:
-            result = f.value.reshape(self._measurement_model.img_shape)
+            result = f.value.reshape(self.img_shape(downscale_factors))
         except AttributeError:
             print("Problem status", prob.status)
             print("Solver name", prob.solver_stats.solver_name)
