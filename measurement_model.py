@@ -226,7 +226,7 @@ class GIMeasurementModel:
         return illum_patterns
 
     @cached_property
-    def _noise_rng(self): # pylint: disable=R0201
+    def _noise_rng(self):
         return np.random.default_rng(2021) # seed is set for repeatability
 
     def simulate_measurement(self, source_image,
