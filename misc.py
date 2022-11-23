@@ -8,6 +8,7 @@ from functools import partial
 from typing import Sequence
 
 import cvxpy as cp
+from scipy.sparse import coo_array
 import matplotlib.pyplot as plt
 import numpy as np
 from imageio import imread, imwrite
@@ -67,6 +68,24 @@ def demo_two_slits(img_shape, slit_length, slit_distance, slit_width,
     else:
         raise NotImplementedError("horizontal slits not implemented yet!")
     return image
+
+
+def apply_mask_to_mt_op(mt_op, mask):
+    flat_mask = mask.ravel()
+    mt_op_masked = np.zeros((mt_op.shape[0], np.count_nonzero(flat_mask) + 1))
+    mt_op_masked[:, 0: -1] = mt_op[:, flat_mask]
+    mt_op_masked[:, -1] = mt_op[:, ~flat_mask].sum(axis=1)
+    return mt_op_masked
+
+
+def transform_using_mask(mask):
+    flat_mask = mask.ravel()
+    nnz = np.count_nonzero(flat_mask)
+    ind0 = np.hstack((np.where(flat_mask)[0], np.where(~flat_mask)[0]))
+    ind1 = np.hstack((np.arange(nnz), nnz*np.ones(flat_mask.size - nnz, dtype=ind0.dtype)))
+    values = np.ones(ind0.size, dtype=bool)
+    transform = coo_array((values, (ind0, ind1)))
+    return transform
 
 
 def save_image_for_show(img_data, img_filename: str, unit_scale=False, rescale=False):
