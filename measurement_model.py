@@ -21,8 +21,10 @@ from imageio import imread
 from scipy.stats.qmc import Sobol
 from skimage.transform import downscale_local_mean
 from tqdm import tqdm
+from cvxpy.atoms.affine.reshape import reshape as cp_reshape
 
 from fiber_propagation import propagator
+from misc import apply_mask_to_mt_op, transform_using_mask
 
 logger = logging.getLogger("FGI-red.measmodel")
 
@@ -134,6 +136,29 @@ class GIMeasurementModel:
         if n_patterns is None:
             return self.mt_op
         return self.mt_op[: n_patterns, ...]
+
+    @cached_property
+    def fiber_mask(self):
+        """
+        Returns a mask whose False elements correspond to pixels whose brightnesses
+        are not transmitted over the fiber well enough.
+
+        Returns
+        -------
+        bool numpy.ndarray of shape `img_shape`.
+            The mask.
+
+        """
+        threshold = 1e-5 # The relative threshold
+        t_start = perf_counter()
+        logger.info("Started calculating the mask")
+        propagate_func = propagator(self.img_shape[0], self._fiber_opts)
+        white_img = np.ones(self.img_shape)
+        mask = propagate_func(white_img) >= threshold
+        t_end = perf_counter()
+        logger.info("Finished calculating the mask, took  %.3g s", t_end - t_start)
+        logger.info("nnz ratio = %d / %d", np.count_nonzero(mask), np.size(mask))
+        return mask
 
     def illumination_patterns(self, n_patterns: int=None) -> np.ndarray:
         """
@@ -323,16 +348,20 @@ class GIProcessingMethod:
     def __init__(self, model: GIMeasurementModel):
         self._measurement_model = model
 
-    def _mt_op(self, n_patterns: Optional[int]=None, downscale_factors=None) -> np.ndarray:
-        if n_patterns is None:
-            mt_op = self._measurement_model.mt_op
-        else:
-            mt_op = self._measurement_model.mt_op_part(n_patterns)
+    def _mt_op(self, n_patterns: Optional[int]=None, downscale_factors=None,
+               use_mask=False) -> np.ndarray:
+        mt_op = self._measurement_model.mt_op_part(n_patterns)
         if downscale_factors is not None:
             factors = (1,) + downscale_factors
             mt_op = mt_op.reshape((-1, ) + self._measurement_model.img_shape)
             mt_op = downscale_local_mean(mt_op, factors)
             mt_op = mt_op.reshape((mt_op.shape[0], -1))
+        if use_mask:
+            mask = self._measurement_model.fiber_mask
+            if downscale_factors is not None:
+                # If any of the pixels to be 'merged' is True, the result should also be True.
+                mask = downscale_local_mean(mask, factors) > 0
+            mt_op = apply_mask_to_mt_op(mt_op, mask)
         return mt_op
 
     def __call__(self, measurement, *args, **kwargs) -> np.ndarray:
@@ -358,6 +387,42 @@ class GIProcessingMethod:
             return orig_shape
         else:
             return (orig_shape[0]//downscale_factors[0], orig_shape[1]//downscale_factors[1])
+
+    def to_image(self, data, downscale_factors=None, use_mask: bool=False) -> np.ndarray:
+        """
+        Convert a 1D array into the corresponding image. Equivalent to reshaping
+        if use_mask is False.
+
+        Parameters
+        ----------
+        data : array_like
+            The data for reshaping.
+        downscale_factors : 2-tuple of ints, optional
+            If not None, the produced image considered to be downscaled
+            in the specified way. The default is None.
+        use_mask : bool, optional
+            If True, the last element of `data` is considered
+            to hold the value of all pixels for which the corresponding mask element
+            is False.
+            The default is False.
+
+        Returns
+        -------
+        image : numpy.ndarray
+            The corresponding image.
+        """
+        if use_mask:
+            mask = self._measurement_model.fiber_mask
+            if downscale_factors is not None:
+                # If any of the pixels to be 'merged' is True, the result should also be True.
+                mask = downscale_local_mean(mask, downscale_factors) > 0
+            transform = transform_using_mask(mask)
+            data = transform @ data
+        try:
+            image = data.reshape(self.img_shape(downscale_factors))
+        except AttributeError:
+            image = cp_reshape(data, self.img_shape(downscale_factors))
+        return image
 
 
 class TraditionalGI(GIProcessingMethod):
