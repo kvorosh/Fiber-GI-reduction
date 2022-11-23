@@ -7,6 +7,7 @@ Created on Sun Oct 30 15:14:12 2022
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from measurement_model import pad_or_trim_to_shape
 from misc import load_demo_image
 
@@ -51,6 +52,37 @@ def for_report_intermediate_lowres():
 
     plt.savefig("figures/low_resolution_intermediate.pdf", bbox_inches="tight")
     plt.show()
+
+
+def for_report_fiber_mask():
+    img_ids = [3, 2, 6, 7]
+    key_seq = ["mask-direct", "direct"]
+
+    nrows = len(key_seq) + 1
+    ncols = len(img_ids)
+    fig = plt.Figure(figsize=(15/2.54, 8/2.54), constrained_layout=True)
+    gs = gridspec.GridSpec(nrows, 2*ncols, fig, hspace=0.25)
+
+    for col_no, img_id in enumerate(img_ids):
+        fname = f"tmp-data/fiber-masking-{img_id}.npz"
+        with np.load(fname) as data:
+            imgs = {key: data[key] for key in key_seq + ["mask"]}
+        if col_no == 0:
+            ax = plt.subplot(gs[0, 3:5])
+            ax.imshow(imgs["mask"], cmap=plt.cm.gray)
+            ax.axis("off")
+            ax.set_title(f"({num_to_letter(col_no)})")
+        else:
+            pass
+        for row_no, key in enumerate(key_seq, 1):
+            ax = plt.subplot(gs[row_no, 2*col_no: 2*(col_no + 1)])
+            ax.imshow(imgs[key], cmap=plt.cm.gray)
+            ax.axis("off")
+            ax.set_title(f"({num_to_letter(col_no + (row_no - 1)*ncols + 1)})")
+
+    plt.savefig("figures/fiber_mask.pdf", bbox_inches="tight")
+    plt.show()
+
 
 
 def for_report_intermediate():
@@ -147,4 +179,5 @@ def for_report_picking_tau():
 if __name__ == "__main__":
     # for_report_picking_tau()
     # for_report_intermediate()
-    for_report_intermediate_lowres()
+    # for_report_intermediate_lowres()
+    for_report_fiber_mask()
