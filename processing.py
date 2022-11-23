@@ -584,6 +584,52 @@ def for_report_intermediate_lowres(img_id):
         np.savez(fname, **frames)
 
 
+def for_report_fiber_mask(img_id):
+    noise_var = 0.1
+    n_measurements = 1024
+    pattern_type = "pseudorandom-phase"
+
+    logger.info(f"Started calculating results for masking for img_id = {img_id}")
+    measurement, model = prepare_measurements(
+        img_id, noise_var=noise_var,
+        n_patterns=n_measurements,
+        pattern_type=pattern_type,
+        img_shape=(128, 128),
+        fiber_opts=PRESET_1
+    )
+    # measurement -= measurement.mean()
+    logger.info("Done simulating measurements")
+
+    tau_values = {(2, 0.0): 1.0, (2, 0.1): 5.6,
+                    (3, 0.): 1e-05, (3, 0.1): 3.7,
+                    (6, 0.): 1.0, (6, 0.1): 1.,
+                    (7, 0.): 10.0, (7, 0.1): 1.}
+    tau_values = defaultdict(lambda: 1., tau_values)
+
+    fname = f"tmp-data/fiber-masking-{img_id}.npz"
+    estimator_sparse = GISparseReduction(model)
+
+    try:
+        with np.load(fname) as d:
+            data = dict(d)
+    except FileNotFoundError:
+        data = {}
+    if "direct" not in data:
+        data["direct"] = estimator_sparse(measurement,
+                                          tau_values[(img_id, noise_var)])
+        np.savez(fname, **data)
+    if "mask" not in data:
+        mask = model.fiber_mask
+        data["mask"] = mask
+        np.savez(fname, **data)
+    if "mask-direct" not in data:
+        estim = estimator_sparse(measurement, tau_values[(img_id, noise_var)],
+                                 use_mask=True)
+        data["mask-direct"] = estim
+        np.savez(fname, **data)
+    logger.info(f"Finished calculating results for masking for img_id = {img_id}")
+
+
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var, n_patterns=n_measurements,
@@ -781,8 +827,10 @@ if __name__ == "__main__":
     # finding_alpha_l_curve(7, 1e-1, "l1h")
     # finding_alpha_l_curve(7, 1e-1, "tc2")
     # finding_alpha_l_curve(7, 1e-1, "tva")
+    # for img_id in [3, 2, 6, 7]:
+    #     for_report_intermediate_lowres(img_id)
     for img_id in [3, 2, 6, 7]:
-        for_report_intermediate_lowres(img_id)
+        for_report_fiber_mask(img_id)
     # finding_alpha_l_curve(7, 1e-1, "tva2")
     # plot_l_curve(3, 1e-1, "l1")
     # finding_iter_params(3, 0.)
