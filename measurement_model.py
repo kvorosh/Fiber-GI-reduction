@@ -228,9 +228,9 @@ class GIMeasurementModel:
         pattern_list = [p for p in ref_dir.glob(pattern_template) if p.is_file()][: self.n_patterns]
         for pattern_no, pattern_path in enumerate(tqdm(pattern_list)):
             raw_pattern = imread(pattern_path, as_gray=True)
-            if raw_pattern.shape[0] == 430 and raw_pattern.shape[1] == 430:
-                crop_to = [0, 400, 0, 400]
-                raw_pattern = raw_pattern[crop_to[2]: crop_to[3], crop_to[0]: crop_to[1]]
+            # if raw_pattern.shape[0] == 430 and raw_pattern.shape[1] == 430:
+            #     crop_to = [0, 400, 0, 400]
+            #     raw_pattern = raw_pattern[crop_to[2]: crop_to[3], crop_to[0]: crop_to[1]]
             if img_shape is not None:
                 #TODO Make it so the produced size is *not larger* than the specified
                 #TODO Calculate the factors only once
