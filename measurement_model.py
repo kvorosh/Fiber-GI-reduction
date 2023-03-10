@@ -22,6 +22,7 @@ from scipy.stats.qmc import Sobol
 from skimage.transform import downscale_local_mean
 from tqdm import tqdm
 from cvxpy.atoms.affine.reshape import reshape as cp_reshape
+from natsort import natsorted, ns
 
 from fiber_propagation import propagator
 from misc import apply_mask_to_mt_op, transform_using_mask
@@ -225,7 +226,9 @@ class GIMeasurementModel:
                     self.n_patterns, pattern_template)
         t_start = perf_counter()
         ref_dir = Path(".")
-        pattern_list = [p for p in ref_dir.glob(pattern_template) if p.is_file()][: self.n_patterns]
+        pattern_list = [p
+                        for p in natsorted(ref_dir.glob(pattern_template), alg=ns.PATH)
+                        if p.is_file()][: self.n_patterns]
         for pattern_no, pattern_path in enumerate(tqdm(pattern_list)):
             raw_pattern = imread(pattern_path, as_gray=True)
             # if raw_pattern.shape[0] == 430 and raw_pattern.shape[1] == 430:
