@@ -39,6 +39,7 @@ class GIMeasurementModel:
     ----------
     n_patterns : int
         The number of illumination patterns, corresponding to measurement size.
+        If sensor_fovs is not None, it is multiplied by the number of sensors.
     img_shape : 2-tuple of ints or None, optional
         The shape of the ghost image. Can be omitted if the illumination patterns
         are loaded from files instead of calculations. In that case if it is not None,
@@ -61,12 +62,19 @@ class GIMeasurementModel:
     fiber_opts : dict or None, optional
         Dictionary of properties of the optical fiber. For examples, see
         PRESET_0 and PRESET_1 in fiber_propagation.py
+    sensor_fovs : numpy.ndarray or None, optional
+        Fields of view of sensors. If None, a single bucket sensor is assumed
+        to be used in the object arm. Otherwise, sensor_fovs is assumed to
+        have the shape (n_sensors, img_shape[0], img_shape[1]), with each value
+        of the first index corresponding to a mask representing the field of view
+        of a sensor.
 
     Attributes
     ----------
     mt_op : numpy.ndarray
         The matrix of the linear operator whose rows are raveled illumination
-        patterns. Has shape (n_patterns, img_shape[0]*img_shape[1]).
+        patterns. Has shape (n_patterns, img_shape[0]*img_shape[1]) or,
+        if sensor_fovs was not None, (n_patterns*n_sensors, img_shape[0]*img_shape[1])
     img_shape : 2-tuple of ints
         The shape of the ghost image.
     pixel_size : float, optional
@@ -88,7 +96,7 @@ class GIMeasurementModel:
 
     def __init__(self, n_patterns: int, img_shape: Optional[Tuple[int, int]]=None, # pylint: disable=R0913
                  pattern_type: str="pseudorandom", pixel_size: float=1.,
-                 unit: str="px", fiber_opts=None):
+                 unit: str="px", fiber_opts=None, sensor_fovs=None):
         self.n_patterns = n_patterns
         self.pixel_size = pixel_size
         self.unit = unit
@@ -117,6 +125,18 @@ class GIMeasurementModel:
             elif pattern_type == "quasirandom-phase":
                 illum_patterns = self._quasirandom_patterns(phase=True)
                 self.suffix = "qp" + str(fiber_opts["id"])
+        # patterns have the shape (n_patterns,) + img_shape
+        if sensor_fovs is not None:
+            n_sensors = sensor_fovs.shape[0]
+            # Add 1-sized axes to use broadcasting
+            illum_patterns = illum_patterns.reshape((self.n_patterns, 1) + self.img_shape)
+            sensor_fovs = sensor_fovs.reshape((1,) + sensor_fovs.shape)
+            # Then make the first two axes into one
+            illum_patterns = (illum_patterns * sensor_fovs).reshape((-1,) + self.img_shape)
+            # The order is: 0-th pattern at 0th sensor, 0th pattern at 1st sensor, ...
+            # 0th pattern at last sensor, 1st pattern at 0th sensor, ...
+            # now patterns have the shape (n_patterns*n_sensors,) + img_shape
+            self.n_patterns *= n_sensors
         self.mt_op = illum_patterns.reshape((self.n_patterns, -1))
 
     def mt_op_part(self, n_patterns: Optional[int]=None) -> np.ndarray:
