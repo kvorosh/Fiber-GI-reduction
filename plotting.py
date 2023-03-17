@@ -85,6 +85,55 @@ def for_report_fiber_mask():
 
 
 
+def for_article_mult_sensors():
+    img_ids = [3, 2, 6, 7]
+    key_seq = ["mask-direct", "direct", "mask", "fovs", "fov-mask"]
+
+    # img_id = 7
+    key_seq = ["mask", "fovs", "direct", "mask-direct", "mask-direct2", "mask-direct4", "fov-mask"]
+    del key_seq[0]
+
+    nrows = 2
+    ncols = 3
+
+    for img_id in img_ids:
+
+        fig_height = 15/2.54
+        fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(15/2.54, fig_height),
+                                constrained_layout=True)
+        axs = axs.ravel()
+
+        fname = f"tmp-data/mult-sens-{img_id}.npz"
+        output_fname = f"figures/mult_sensors_{img_id}.pdf"
+        with np.load(fname) as data:
+            # if img_id == 3:
+            #     key_seq2 = key_seq
+            # else:
+            #     key_seq2 = key_seq[1:]
+            for i, key in enumerate(key_seq):
+                # ax = axs[i if key != key_seq[-1] else i + 1]
+                ax = axs[i]
+                if key == "fovs":
+                    fovs = data[key]
+                    fovs = np.moveaxis(fovs, 0, -1).astype(float)
+                    fovs_img = fovs[..., :3]
+                    fovs_img[..., 0] += fovs[..., -1]*(147./255)
+                    fovs_img[..., 1] += fovs[..., -1]*(81./255)
+                    fovs_img[..., 2] += fovs[..., -1]*(48./255)
+                    ax.imshow(fovs_img)
+                else:
+                    ax.imshow(data[key], cmap=plt.cm.gray)
+                ax.set_title(f"({num_to_letter(i)})", y=-0.2)
+                ax.axis("off")
+        if i < nrows*ncols:
+            for j in range(i, nrows*ncols):
+                ax = axs[j]
+                ax.axis("off")
+        plt.savefig(output_fname, bbox_inches="tight")
+        plt.show()
+
+
+
 def for_report_intermediate():
     img_ids = [3, 2, 6, 7]
 
@@ -180,4 +229,5 @@ if __name__ == "__main__":
     # for_report_picking_tau()
     # for_report_intermediate()
     # for_report_intermediate_lowres()
-    for_report_fiber_mask()
+    # for_report_fiber_mask()
+    for_article_mult_sensors()

@@ -97,7 +97,7 @@ def figure_name_format(img_id, n_patterns, noise_var=0., kind="", alpha=None,
 
 def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 1024,
                          pattern_type: str="pseudorandom", img_shape=None,
-                         fiber_opts=PRESET_0, n_measurements: int=1):
+                         fiber_opts=PRESET_0, n_measurements: int=1, sensor_fovs=None):
     if not isinstance(data_source, int):
         measurement = data_source
         n_patterns = measurement.size
@@ -108,7 +108,10 @@ def prepare_measurements(data_source=3, noise_var: float = 0, n_patterns: int = 
         img_shape = (128, 128)
         pixel_size = (2.5 * 50. / 4)/img_shape[0]
 
-    model = GIMeasurementModel(n_patterns, img_shape, pattern_type, pixel_size=pixel_size, fiber_opts=fiber_opts)
+    model = GIMeasurementModel(
+        n_patterns, img_shape, pattern_type, pixel_size=pixel_size,
+        fiber_opts=fiber_opts, sensor_fovs=sensor_fovs
+    )
 
     if isinstance(data_source, int): # pylint: disable=R1705
         src_img = load_demo_image(data_source)
@@ -344,11 +347,16 @@ def show_methods(img_id=3, noise_var=0., n_patterns=1024,
         logger.info("Estimation using %s took %.3g s.", processing_method.name,
                     perf_counter() - t_estim_start)
 
-    tau_values = {(2, 0.0): 1.0, (2, 0.1): 1,
-                  (3, 0.): 1e-05, (3, 0.1): 0.1,
-                  (6, 0.): 1.0, (6, 0.1): 1,
-                  (7, 0.): 10.0, (7, 0.1): 1.,
-                  (8, 0.): 1e-05, (8, 0.1): 1e-5}
+    # tau_values = {(2, 0.0): 1.0, (2, 0.1): 1,
+    #               (3, 0.): 1e-05, (3, 0.1): 0.1,
+    #               (6, 0.): 1.0, (6, 0.1): 1,
+    #               (7, 0.): 10.0, (7, 0.1): 1.,
+    #               (8, 0.): 1e-05, (8, 0.1): 1e-5}
+    tau_values = {(2, 0.0): 1.0, (2, 0.1): 5.6,
+                    (3, 0.): 1e-05, (3, 0.1): 3.7,
+                    (6, 0.): 1.0, (6, 0.1): 5.3,
+                    (7, 0.): 10.0, (7, 0.1): 4.3,
+                    (8, 0.): 1e-05, (8, 0.1): 1e-5}
     tau_values = defaultdict(lambda: 1., tau_values)
 
     processing_methods = [TraditionalGI] + cs_processing_methods + [GIDenseReduction, GISparseReduction]
@@ -630,6 +638,116 @@ def for_report_fiber_mask(img_id):
     logger.info(f"Finished calculating results for masking for img_id = {img_id}")
 
 
+def for_article_multiple_sensors(img_id):
+    noise_var = 0.1
+    # n_measurements = 1024
+    n_measurements_all = {3: 128, 2: 256, 6: 128, 7: 128}
+    n_measurements = n_measurements_all[img_id]
+    pattern_type = "pseudorandom-phase"
+
+    center_offset = int(np.floor(37/2**0.5))
+    radius = center_offset
+    center = np.array((64, 64))
+
+    def fill_circle(arr, circle_center, circle_radius):
+        idx = np.indices(arr.shape)
+        dist_sq = (idx[0] - circle_center[0])**2 + (idx[1] - circle_center[1])**2
+        arr[dist_sq <= circle_radius**2] = 1
+
+    fovs = np.zeros((4, 128, 128), dtype=bool)
+    fill_circle(fovs[0, ...], (center[0] + center_offset, center[1]), radius)
+    fill_circle(fovs[1, ...], (center[0] - center_offset, center[1]), radius)
+    fill_circle(fovs[2, ...], (center[0], center[1] + center_offset), radius)
+    fill_circle(fovs[3, ...], (center[0], center[1] - center_offset), radius)
+
+    logger.info(f"Started calculating results for multiple detectors for img_id = {img_id}")
+    measurement, model = prepare_measurements(
+        img_id, noise_var=noise_var,
+        n_patterns=n_measurements,
+        pattern_type=pattern_type,
+        img_shape=(128, 128),
+        fiber_opts=PRESET_1,
+        sensor_fovs=fovs
+    )
+    # pattern shape: (1024, 128, 128) before applying the FoV data
+    # and (4096, 128, 128) afterwards
+    measurement2, model2 = prepare_measurements(
+        img_id, noise_var=noise_var,
+        n_patterns=4*n_measurements,
+        pattern_type=pattern_type,
+        img_shape=(128, 128),
+        fiber_opts=PRESET_1
+    )
+    # measurement -= measurement.mean()
+    logger.info("Done simulating measurements")
+
+
+    tau_values = {(2, 0.0): 1.0, (2, 0.1): 5.6,
+                    (3, 0.): 1e-05, (3, 0.1): 3.7,
+                    (6, 0.): 1.0, (6, 0.1): 1.,
+                    (7, 0.): 10.0, (7, 0.1): 1.}
+    tau_values = defaultdict(lambda: 1., tau_values)
+
+    fname = f"tmp-data/mult-sens-{img_id}.npz"
+    estimator_sparse = GISparseReduction(model)
+    estimator_sparse2 = GISparseReduction(model2)
+
+    try:
+        with np.load(fname) as d:
+            data = dict(d)
+    except FileNotFoundError:
+        data = {}
+    if "direct" not in data:
+        data["direct"] = estimator_sparse2(measurement2[: n_measurements],
+                                          tau_values[(img_id, noise_var)])
+        np.savez(fname, **data)
+    if "direct2" not in data:
+        data["direct2"] = estimator_sparse2(measurement2[: 2*n_measurements],
+                                          tau_values[(img_id, noise_var)])
+        np.savez(fname, **data)
+    if "direct4" not in data:
+        data["direct4"] = estimator_sparse2(measurement2,
+                                          tau_values[(img_id, noise_var)])
+        np.savez(fname, **data)
+    if "mask" not in data:
+        mask = model.fiber_mask
+        data["mask"] = mask
+        np.savez(fname, **data)
+    else:
+        mask = data["mask"]
+    if "fovs" not in data:
+        data["fovs"] = fovs
+        np.savez(fname, **data)
+    if "mask-direct" not in data:
+        estim_mask = estimator_sparse2(measurement2[: n_measurements],
+                                       tau_values[(img_id, noise_var)],
+                                       use_mask=True)
+        data["mask-direct"] = estim_mask
+        np.savez(fname, **data)
+    if "mask-direct2" not in data:
+        estim_mask = estimator_sparse2(measurement2[: 2*n_measurements],
+                                       tau_values[(img_id, noise_var)],
+                                       use_mask=True)
+        data["mask-direct2"] = estim_mask
+        np.savez(fname, **data)
+    if "mask-direct4" not in data:
+        estim_mask = estimator_sparse2(measurement2,
+                                       tau_values[(img_id, noise_var)],
+                                       use_mask=True)
+        data["mask-direct4"] = estim_mask
+        np.savez(fname, **data)
+    else:
+        estim_mask = data["mask-direct4"]
+    if "fov-mask" not in data:
+        fov_estim = estimator_sparse(measurement, tau_values[(img_id, noise_var)],
+                                     use_mask=True)
+        data["fov-mask"] = fov_estim
+        np.savez(fname, **data)
+    else:
+        fov_estim = data["fov-mask"]
+    logger.info(f"Finished calculating results for masking for img_id = {img_id}")
+
+
 def show_single_method(img_id=3, noise_var=0., n_measurements=1024, pattern_type: str="pseudorandom") -> None:
     measurement, model = prepare_measurements(
         img_id, noise_var=noise_var, n_patterns=n_measurements,
@@ -829,8 +947,10 @@ if __name__ == "__main__":
     # finding_alpha_l_curve(7, 1e-1, "tva")
     # for img_id in [3, 2, 6, 7]:
     #     for_report_intermediate_lowres(img_id)
+    # for img_id in [3, 2, 6, 7]:
+    #     for_report_fiber_mask(img_id)
     for img_id in [3, 2, 6, 7]:
-        for_report_fiber_mask(img_id)
+        for_article_multiple_sensors(img_id)
     # finding_alpha_l_curve(7, 1e-1, "tva2")
     # plot_l_curve(3, 1e-1, "l1")
     # finding_iter_params(3, 0.)
