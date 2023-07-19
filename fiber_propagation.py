@@ -24,7 +24,7 @@ class _Propagator():
     def __call__(self, img):
         coeffs = self._eigenvectors.dot(np.sqrt(img).ravel())
         coeffs = self._prop_matrix.dot(coeffs)
-        return (abs(self._eigenvectors.T.dot(coeffs))**2).reshape(img.shape)
+        return (abs(self._eigenvectors.conj().T.dot(coeffs))**2).reshape(img.shape)
 
 
 @memory.cache
@@ -80,7 +80,7 @@ def propagator(grid_dim=64, preset=PRESET_0):
             img2 = np.sqrt(img)
         coeffs = eigenvectors.dot(img2.ravel())
         coeffs = prop_matrix.dot(coeffs)
-        return (abs(eigenvectors.T.dot(coeffs))**2).reshape(img_shape)
+        return (abs(eigenvectors.conj().T.dot(coeffs))**2).reshape(img_shape)
 
     return _Propagator(eigenvectors, prop_matrix)
 
