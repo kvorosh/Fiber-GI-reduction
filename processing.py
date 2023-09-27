@@ -896,6 +896,12 @@ if __name__ == "__main__":
     # show_methods(6, 1e-1)
     # show_methods(7)
     # show_methods(7, 1e-1)
+    # show_single_method(np.load("bucket_data/objest_data_TDC_10_11.npy").astype(float),
+    #                     pattern_type="speckle_patterns/quantum_11_10_v1/slm*.bmp")
+    # show_single_method(np.load("bucket_data/objest_data_TDC_11_12.npy").astype(float),
+                        # pattern_type="speckle_patterns/quantum_11_12/slm*.bmp")
+    # show_methods(6, 1e-1, n_patterns=1024, save=False, show=True,
+    #               pattern_type="pseudorandom-phase", fiber_opts=PRESET_1)
     # for_report_picking_tau_data(3, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
     # for_report_picking_tau_data(2, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
     # for_report_picking_tau_data(6, 1e-1, 1024, "pseudorandom-phase", PRESET_1)
@@ -951,6 +957,11 @@ if __name__ == "__main__":
     #     for_report_fiber_mask(img_id)
     for img_id in [3, 2, 6, 7]:
         for_article_multiple_sensors(img_id)
+    # show_methods(7, 1e-1, n_patterns=512,
+    #               pattern_type="speckle_patterns/11_22_2021_spekls_1cm/slm*.bmp",
+    #               save=True, show=True)
+    # show_methods(np.load("bucket_data/obj_data_nol_3mm_5k.npy").astype(float),
+    #                     pattern_type="speckle_patterns/11_24_2021_spekls_3mm_nol/slm*.bmp", show=True)
     # finding_alpha_l_curve(7, 1e-1, "tva2")
     # plot_l_curve(3, 1e-1, "l1")
     # finding_iter_params(3, 0.)
