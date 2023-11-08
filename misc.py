@@ -12,6 +12,7 @@ from scipy.sparse import coo_array
 import matplotlib.pyplot as plt
 import numpy as np
 from imageio import imread, imwrite
+from skimage.transform import downscale_local_mean
 
 
 logger = logging.getLogger("FGI-red.misc")
@@ -39,11 +40,15 @@ def load_demo_image(img_id=0, full_span=False, pad_by=0):
     img_paths = {0: "teapot.png", 1: "logo.png", 2: "logo64.png",
                  3: partial(demo_two_slits, (64, 64), 48, 8, 8), 4: "simple.png",
                  5: "alum.png", 6: "teapot128.png", 7: "teapot64.png",
-                 8: partial(demo_two_slits, (128, 128), 96, 16, 16)}
+                 8: partial(demo_two_slits, (128, 128), 96, 16, 16),
+                 9: partial(demo_two_slits, (64, 64), 48, 8, 8), 10: "logo64.png",
+                 11: "teapot128.png", 12: "teapot64.png"}
     if callable(img_paths[img_id]):
         img = img_paths[img_id]()
     else:
         img = imread(img_paths[img_id], as_gray=True)
+        if img_id in {10, 11, 12}:
+            img = downscale_local_mean(img, (2, 2))
         img -= 0.4999
         img /= 255
         if full_span:
