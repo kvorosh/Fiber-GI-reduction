@@ -42,18 +42,19 @@ class GIMeasurementModel:
         If sensor_fovs is not None, it is multiplied by the number of sensors.
     img_shape : 2-tuple of ints or None, optional
         The shape of the ghost image. Can be omitted if the illumination patterns
-        are loaded from files instead of calculations. In that case if it is not None,
-        the loaded patterns are resized to approximately given size
-        ('approximately' because since skimage.transform.downscale_local_mean is used).
+        are loaded from files instead of calculations or provided directly.
+        In that case if it is not None, the loaded patterns are resized
+        to approximately given size ('approximately' because since
+        skimage.transform.downscale_local_mean is used).
     pattern_type : {"pseudorandom", "quasirandom", "pseudorandom-phase",
-                    "quasirandom-phase", "speckle"}, optional
+                    "quasirandom-phase"}, glob pattern or array_like, optional
         What illumination patterns to use. Valid values are "pseudorandom",
         "quasirandom", "pseudorandom-phase", "quasirandom-phase"
         (corresponding to binary or random-phase pseudo- or quasirandom patterns
-        which then pass through the optical fiber) and "speckle" (corresponding
-        to acquired photos of illumination patterns). Photos are loaded from
-        the files 'speckle_patterns/slmX', where X are integers starting from 0
-        and the format is any supported by `imageio.imread`.
+        which then pass through the optical fiber), glob patterns (corresponding
+        to acquired photos of illumination patterns that are loaded from matching files).
+        Alternatively, they can be provided directly, in which case the first dimension
+        must correspond to pattern numbers.
         The default is "pseudorandom".
     pixel_size : float or None, optional
         Image pixel size in e.g. metric units.
@@ -95,7 +96,7 @@ class GIMeasurementModel:
     """
 
     def __init__(self, n_patterns: int, img_shape: Optional[Tuple[int, int]]=None, # pylint: disable=R0913
-                 pattern_type: str="pseudorandom", pixel_size: float=1.,
+                 pattern_type: str|np.typing.ArrayLike="pseudorandom", pixel_size: float=1.,
                  unit: str="px", fiber_opts=None, sensor_fovs=None):
         self.n_patterns = n_patterns
         self.pixel_size = pixel_size
@@ -103,34 +104,58 @@ class GIMeasurementModel:
         self._fiber_opts = fiber_opts
         logger.info("Using optical fiber options %s", self._fiber_opts)
         self.suffix = ""
-        if "*" in pattern_type:
-            illum_patterns = self._load_speckle_patterns(img_shape, pattern_type)
+        illum_patterns = np.array(pattern_type)
+        if len(illum_patterns.shape) >= 2:
+            self.suffix = "d" # provided Directly
             self.img_shape = illum_patterns.shape[1:]
-            self.suffix = "c"
         else:
-            if img_shape is None:
-                raise ValueError(
-                    "Must provide the image shape unless using speckle patterns."
-                )
-            self.img_shape = img_shape
-            if pattern_type == "pseudorandom":
-                illum_patterns = self._pseudorandom_patterns()
-                self.suffix = "pb" + str(fiber_opts["id"])
-            elif pattern_type == "quasirandom":
-                illum_patterns = self._quasirandom_patterns()
-                self.suffix = "qb" + str(fiber_opts["id"])
-            elif pattern_type == "pseudorandom-phase":
-                illum_patterns = self._pseudorandom_patterns(phase=True)
-                self.suffix = "pp" + str(fiber_opts["id"])
-            elif pattern_type == "quasirandom-phase":
-                illum_patterns = self._quasirandom_patterns(phase=True)
-                self.suffix = "qp" + str(fiber_opts["id"])
+            if "*" in pattern_type:
+                illum_patterns = self._load_speckle_patterns(img_shape, pattern_type)
+                self.img_shape = illum_patterns.shape[1:]
+                self.suffix = "c" # from Calibration
+            else:
+                if img_shape is None:
+                    raise ValueError(
+                        "Must provide the image shape unless using speckle patterns."
+                    )
+                self.img_shape = img_shape
+                if pattern_type == "pseudorandom":
+                    illum_patterns = self._pseudorandom_patterns()
+                    self.suffix = "pb" + str(fiber_opts["id"])
+                elif pattern_type == "quasirandom":
+                    illum_patterns = self._quasirandom_patterns()
+                    self.suffix = "qb" + str(fiber_opts["id"])
+                elif pattern_type == "pseudorandom-phase":
+                    illum_patterns = self._pseudorandom_patterns(phase=True)
+                    self.suffix = "pp" + str(fiber_opts["id"])
+                elif pattern_type == "quasirandom-phase":
+                    illum_patterns = self._quasirandom_patterns(phase=True)
+                    self.suffix = "qp" + str(fiber_opts["id"])
+        self.sensor_fovs = sensor_fovs
+        self.assign_mt_op(illum_patterns)
+
+    def assign_mt_op(self, illum_patterns):
+        """
+        Set up the specified illumination patterns to be used in the measurement
+        model, taking the sensor FoVs into account.
+
+        Parameters
+        ----------
+        illum_patterns : ndarray of shape (n_patterns,) + pattern_shape
+            The illumination patterns to be used.
+
+        Returns
+        -------
+        None.
+
+        """
+        self.n_patterns = illum_patterns.shape[0]
         # patterns have the shape (n_patterns,) + img_shape
-        if sensor_fovs is not None:
-            n_sensors = sensor_fovs.shape[0]
+        if self.sensor_fovs is not None:
+            n_sensors = self.sensor_fovs.shape[0]
             # Add 1-sized axes to use broadcasting
             illum_patterns = illum_patterns.reshape((self.n_patterns, 1) + self.img_shape)
-            sensor_fovs = sensor_fovs.reshape((1,) + sensor_fovs.shape)
+            sensor_fovs = self.sensor_fovs.reshape((1,) + self.sensor_fovs.shape)
             # Then make the first two axes into one
             illum_patterns = (illum_patterns * sensor_fovs).reshape((-1,) + self.img_shape)
             # The order is: 0-th pattern at 0th sensor, 0th pattern at 1st sensor, ...
