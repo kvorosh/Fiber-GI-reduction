@@ -6,6 +6,7 @@
 import logging
 from functools import partial
 from typing import Sequence
+from pathlib import Path
 
 import cvxpy as cp
 from scipy.sparse import coo_array
@@ -93,7 +94,7 @@ def transform_using_mask(mask):
     return transform
 
 
-def save_image_for_show(img_data, img_filename: str, unit_scale=False, rescale=False):
+def save_image_for_show(img_data, img_filename: str, unit_scale=False, rescale=False, base_path=None):
     """
     Save an image to a file with specified name. Output format is PNG.
 
@@ -107,6 +108,8 @@ def save_image_for_show(img_data, img_filename: str, unit_scale=False, rescale=F
         Whether the pixels take values in [0, 1] range.
     rescale : bool
         Whether to move the pixel values to the [0, 255] range.
+    base_path : Path or None
+        Path to output directory.
     """
     if rescale:
         img_data = img_data - img_data.min()
@@ -114,7 +117,9 @@ def save_image_for_show(img_data, img_filename: str, unit_scale=False, rescale=F
         img_data = img_data.astype(np.uint8)
     if unit_scale:
         img_data = (img_data * 255).astype(np.uint8)
-    imwrite("../figures/" + img_filename + ".png", img_data)
+    if base_path is None:
+        base_path = Path("../figures/")
+    imwrite(base_path / (img_filename + ".png"), img_data)
 
 
 def visualize_image(image, vmax=None):
@@ -131,7 +136,7 @@ def visualize_image(image, vmax=None):
     plt.imshow(image, cmap=plt.cm.gray, vmin=0, vmax=vmax)
 
 
-def save_vectors(fname, vectors, names, with_ind=True, num_fmt="%.18e"):
+def save_vectors(fname, vectors, names, with_ind=True, num_fmt="%.18e", base_path=None):
     """
     Save several vectors of the same length to file with headers.
     """
@@ -145,7 +150,9 @@ def save_vectors(fname, vectors, names, with_ind=True, num_fmt="%.18e"):
 
     results = np.vstack(vectors).T
     header = "\t".join(names)
-    np.savetxt("../data/" + fname + ".dat", results, delimiter='\t',
+    if base_path is None:
+        base_path = Path("../data/")
+    np.savetxt(base_path / (fname + ".dat"), results, delimiter='\t',
                header=header, fmt=fmt)
 
 
