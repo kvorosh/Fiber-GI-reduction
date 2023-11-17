@@ -69,7 +69,9 @@ def do_estimation(glob_to_patterns: str, path_to_measurement: str,
 
     estimator = GISparseReduction(model)
 
-    estimate = estimator(measurement, 1e3)
+    estimate = estimator(measurement, 3e2,
+                         skip_tv=n_measurements>=model.img_shape[0]*model.img_shape[1])
+
 
     if disp:
         plt.imshow(estimate)
@@ -79,10 +81,10 @@ def do_estimation(glob_to_patterns: str, path_to_measurement: str,
 
 
 def main():
-    n_measurements = [100, 200, 400, 1000, 2000, 4000]
+    n_measurements = [400, 700, 1000, 2000, 5000, 8000]
 
-    estimates = [do_estimation("speckle_patterns/For_BDA/slm*.bmp",
-                               "bucket_data/test_object5k.npy", n, False)
+    estimates = [do_estimation("speckle_patterns/For_BDA_obj2/slm*.bmp",
+                               "bucket_data/obj2_1bin_8k_v3.npy", n, False)
                  for n in n_measurements]
 
     for i, (n, u) in enumerate(zip(n_measurements, estimates), 1):
@@ -94,6 +96,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # do_estimation("speckle_patterns/For_BDA/slm*.bmp", "bucket_data/test_object5k.npy", 100)
-    # choice_of_tau("speckle_patterns/For_BDA/slm*.bmp", "bucket_data/test_object5k.npy", 1000)
+    # do_estimation("speckle_patterns/For_BDA_obj2/slm*.bmp", "bucket_data/obj2_1bin_8k_v3.npy", 4000)
+    # choice_of_tau("speckle_patterns/For_BDA_obj2/slm*.bmp", "bucket_data/obj2_1bin_8k_v3.npy", 2000)
     main()
