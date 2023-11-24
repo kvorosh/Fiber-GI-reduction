@@ -7,6 +7,7 @@ Created on Wed Nov  8 18:17:59 2023
 
 import logging
 # from time import perf_counter
+from os.path import splitext, basename
 import matplotlib.pyplot as plt
 import numpy as np
 from reduction import GIDenseReduction, GISparseReduction, GIDenseReductionIter, do_thresholding
@@ -54,7 +55,8 @@ def choice_of_tau(glob_to_patterns: str, path_to_measurement: str, n_measurement
 
 
 def do_estimation(glob_to_patterns: str, path_to_measurement: str,
-                  n_measurements: int|None=None, disp: bool=True, direct: bool=True) -> np.ndarray:
+                  n_measurements: int|None=None, tau_value: float=1.,
+                  disp: bool=True, direct: bool=True) -> np.ndarray:
     measurement = np.load(path_to_measurement)
     if n_measurements is None:
         n_measurements = measurement.size
@@ -65,7 +67,6 @@ def do_estimation(glob_to_patterns: str, path_to_measurement: str,
 
     estimator = GISparseReduction(model)
 
-    tau_value = 3e2
     if direct:
         estimate = estimator(measurement, tau_value,
                               skip_tv=n_measurements>=model.img_shape[0]*model.img_shape[1])
@@ -86,13 +87,13 @@ def do_estimation(glob_to_patterns: str, path_to_measurement: str,
     return estimate
 
 
-def main():
-    n_measurements = [400, 700, 1000, 1700, 2800, 4500]
-
-    estimates = [do_estimation("speckle_patterns/test_tdc_1bin_45k/pat*.bmp",
-                               "bucket_data/test_tdc_1bin_45k.npy", n, False, False)
+def main(glob_to_patterns: str, path_to_measurement: str, tau: float, n_measurements: list, direct: bool=True):
+    estimates = [do_estimation(glob_to_patterns, path_to_measurement, n, tau, False, direct)
                  for n in n_measurements]
-
+    name = "red_" + ("" if direct else "iter_") + splitext(basename(path_to_measurement))[0]
+    np.savez(f"figures/{name}.npz",
+              **{f"red_{nmeas}": est
+                for nmeas, est in zip(n_measurements, estimates)})
 
     fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(19.2/2.54, 9.8/2.54))
     axs = axs.ravel()
@@ -102,11 +103,14 @@ def main():
         ax.axis("off")
         ax.set_title(f"{n} измерений")
 
+    fig.savefig(f"figures/{name}.pdf")
     # plt.show()
     plt.close(fig)
 
 
 if __name__ == "__main__":
-    # do_estimation("speckle_patterns/test_tdc_1bin_45k/pat*.bmp", "bucket_data/test_tdc_1bin_45k.npy", 200)
-    # choice_of_tau("speckle_patterns/test_tdc_1bin_45k/pat*.bmp", "bucket_data/test_tdc_1bin_45k.npy", 2000)
-    main()
+    # choice_of_tau("speckle_patterns/patt_ob7_6k/pat*.bmp", "bucket_data/obj2_tdc_1bin_6k_final.npy", 6000)
+    # do_estimation("speckle_patterns/patt_ob7_6k/pat*.bmp", "bucket_data/obj2_tdc_1bin_6k_final.npy",
+    #               2000, 3e1)
+    main("speckle_patterns/patt_ob7_6k/pat*.bmp", "bucket_data/obj2_tdc_1bin_6k_final.npy",
+          3e2, [600, 1000, 1500, 2400, 3800, 6000], False)
