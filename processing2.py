@@ -6,16 +6,11 @@ Created on Wed Nov  8 18:17:59 2023
 """
 
 import logging
-from time import perf_counter
+# from time import perf_counter
 import matplotlib.pyplot as plt
 import numpy as np
-from misc import load_demo_image, save_image_for_show
-from reduction import GIDenseReduction, GISparseReduction, GIDenseReductionIter
-from measurement_model import GIMeasurementModel, pad_or_trim_to_shape, TraditionalGI
-from compressive_sensing import (GICompressiveSensingL1DCT,
-                                 GICompressiveSensingL1Haar, GICompressiveTC2,
-                                 GICompressiveAnisotropicTotalVariation,
-                                 GICompressiveAnisotropicTotalVariation2)
+from reduction import GIDenseReduction, GISparseReduction, GIDenseReductionIter, do_thresholding
+from measurement_model import GIMeasurementModel, TraditionalGI
 
 
 logger = logging.getLogger("FGI-red")
@@ -33,8 +28,9 @@ logger.addHandler(fh)
 logger.addHandler(ch)
 
 
-def choice_of_tau(glob_to_patterns, path_to_measurement, n_measurements: int|None=None) -> None:
+def choice_of_tau(glob_to_patterns: str, path_to_measurement: str, n_measurements: int|None=None) -> None:
     measurement = np.load(path_to_measurement)
+    print("Total of", measurement.size, "measurements.")
     if n_measurements is None:
         n_measurements = measurement.size
     else:
@@ -58,7 +54,7 @@ def choice_of_tau(glob_to_patterns, path_to_measurement, n_measurements: int|Non
 
 
 def do_estimation(glob_to_patterns: str, path_to_measurement: str,
-                  n_measurements: int|None=None, disp: bool=True) -> np.ndarray:
+                  n_measurements: int|None=None, disp: bool=True, direct: bool=True) -> np.ndarray:
     measurement = np.load(path_to_measurement)
     if n_measurements is None:
         n_measurements = measurement.size
@@ -69,33 +65,48 @@ def do_estimation(glob_to_patterns: str, path_to_measurement: str,
 
     estimator = GISparseReduction(model)
 
-    estimate = estimator(measurement, 3e2,
-                         skip_tv=n_measurements>=model.img_shape[0]*model.img_shape[1])
-
+    tau_value = 3e2
+    if direct:
+        estimate = estimator(measurement, tau_value,
+                              skip_tv=n_measurements>=model.img_shape[0]*model.img_shape[1])
+    else:
+        estimator_k = GIDenseReductionIter(model)
+        n_cycles = 64
+        estimate_lin = estimator_k(measurement, n_iter=n_cycles*n_measurements)
+        _, sing_val, sing_vec = GIDenseReduction(model)(measurement, eig=True)
+        result_interm = do_thresholding(estimate_lin, basis="eig", thresholding_coeff=3e2,
+                                    sing_val=sing_val, sing_vec=sing_vec)
+        estimate = estimator(measurement, tau_value, red_res=result_interm,
+                             skip_tv=n_measurements>=model.img_shape[0]*model.img_shape[1])
 
     if disp:
-        plt.imshow(estimate)
+        plt.imshow(estimate, cmap=plt.cm.gray)
         plt.show()
 
     return estimate
 
 
 def main():
-    n_measurements = [400, 700, 1000, 2000, 5000, 8000]
+    n_measurements = [400, 700, 1000, 1700, 2800, 4500]
 
-    estimates = [do_estimation("speckle_patterns/For_BDA_obj2/slm*.bmp",
-                               "bucket_data/obj2_1bin_8k_v3.npy", n, False)
+    estimates = [do_estimation("speckle_patterns/test_tdc_1bin_45k/pat*.bmp",
+                               "bucket_data/test_tdc_1bin_45k.npy", n, False, False)
                  for n in n_measurements]
 
-    for i, (n, u) in enumerate(zip(n_measurements, estimates), 1):
-        plt.subplot(2, 3, i)
-        plt.imshow(u, cmap=plt.cm.gray)
-        plt.title(f"{n} измерений")
 
-    plt.show()
+    fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(19.2/2.54, 9.8/2.54))
+    axs = axs.ravel()
+
+    for ax, n, u in zip(axs, n_measurements, estimates):
+        ax.imshow(u, cmap=plt.cm.gray)
+        ax.axis("off")
+        ax.set_title(f"{n} измерений")
+
+    # plt.show()
+    plt.close(fig)
 
 
 if __name__ == "__main__":
-    # do_estimation("speckle_patterns/For_BDA_obj2/slm*.bmp", "bucket_data/obj2_1bin_8k_v3.npy", 4000)
-    # choice_of_tau("speckle_patterns/For_BDA_obj2/slm*.bmp", "bucket_data/obj2_1bin_8k_v3.npy", 2000)
+    # do_estimation("speckle_patterns/test_tdc_1bin_45k/pat*.bmp", "bucket_data/test_tdc_1bin_45k.npy", 200)
+    # choice_of_tau("speckle_patterns/test_tdc_1bin_45k/pat*.bmp", "bucket_data/test_tdc_1bin_45k.npy", 2000)
     main()
